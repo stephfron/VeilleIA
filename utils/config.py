@@ -5,6 +5,28 @@ Importer depuis ici, jamais directement depuis os.getenv dans les services.
 import os
 from pathlib import Path
 
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
+
+def _get_secret(key: str, default: str = "") -> str:
+    """
+    Lit une variable de config, en tentant d'abord les variables d'environnement
+    (Render) puis st.secrets (Streamlit Community Cloud), qui n'expose pas
+    toujours ses secrets en variables d'environnement classiques.
+    """
+    val = os.getenv(key)
+    if val:
+        return val
+    if st is not None:
+        try:
+            return str(st.secrets.get(key, default))
+        except Exception:
+            return default
+    return default
+
 # ---------------------------------------------------------------------------
 # Répertoires
 # ---------------------------------------------------------------------------
@@ -31,7 +53,7 @@ RNE_RESOURCE_IDS: dict[str, str] = {
 # INSEE SIRENE — api.insee.fr
 # ---------------------------------------------------------------------------
 SIRENE_BASE_URL: str = "https://api.insee.fr/api-sirene/3.11/siret"
-SIRENE_API_KEY: str = os.getenv("INSEE_SIRENE_API_KEY", "")
+SIRENE_API_KEY: str = _get_secret("INSEE_SIRENE_API_KEY")
 SIRENE_PAGE_SIZE: int = 1_000
 SIRENE_MAX_OFFSET: int = 9_000   # L'API bloque au-delà de 10 000 résultats / requête
 SIRENE_DELAY: float = 1.0        # Délai entre pages (évite le rate-limit)
@@ -64,6 +86,6 @@ DOLE_PAGE_DELAY: float = 0.5     # Délai entre pages HF
 # ---------------------------------------------------------------------------
 # Authentification — streamlit-authenticator
 # ---------------------------------------------------------------------------
-AUTH_USERNAME: str = os.getenv("AUTH_USERNAME", "")
-AUTH_PASSWORD_HASH: str = os.getenv("AUTH_PASSWORD_HASH", "")
-AUTH_COOKIE_KEY: str = os.getenv("AUTH_COOKIE_KEY", "")
+AUTH_USERNAME: str = _get_secret("AUTH_USERNAME")
+AUTH_PASSWORD_HASH: str = _get_secret("AUTH_PASSWORD_HASH")
+AUTH_COOKIE_KEY: str = _get_secret("AUTH_COOKIE_KEY")
