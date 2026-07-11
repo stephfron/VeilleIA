@@ -6,7 +6,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 300,
-      "excludeFiles": "{frontend/**,tests/**,.claude/**,.devcontainer/**,data/**}"
+      "excludeFiles": "{frontend/**,tests/**,.claude/**,.devcontainer/**,data/raw/**,data/processed/**}"
     }
   },
   "rewrites": [

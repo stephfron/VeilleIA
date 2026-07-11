@@ -22,6 +22,18 @@ données** (services/, utils/, cache, tests) qui reste la source unique de logiq
 - `tests/test_api.py` : 10 tests FastAPI (TestClient, services mockés — aucun réseau)
 - `render.yaml` : build front (npm ci + vite build) puis `uvicorn backend.app:app`
 
+**Optimisation des recherches (2026-07-11)** — trois goulots corrigés :
+1. *Cold start serverless* : snapshot réel RNE + DOLE committé (`data/seed/`,
+   régénérable via `scripts/refresh_seed.py`) servi en fallback du cache → première
+   recherche sans aucun téléchargement (~0,2 s au lieu de 40-60 s). RNE = élus en
+   activité uniquement (348 sénateurs + 577 députés, mandats en cours).
+2. *Re-parsing* : `@memoize()` (utils/cache.py) garde en RAM les DataFrames parsés
+   (le JSON DOLE fait 8 Mo) pour la durée de vie de l'instance.
+3. *SIRENE non borné* : `rechercher_parlementaire(limit=20)` — les fetchs SIRENE
+   (1-3 min/département hors cache, quota INSEE 30 req/min) s'arrêtent à la limite.
+   Reste vrai : la première fiche d'un département est lente, les suivantes instantanées.
+Tri des textes DOLE par date décroissante (les lois récentes d'abord).
+
 **Déploiement Vercel (2026-07-11, prototype privé)** — `vercel.json` : front statique
 (CDN) + une fonction serverless Python (`api/index.py` → `backend/app.py`, maxDuration
 300 s), rewrites `/api/*` → fonction, SPA fallback. Cache fichier redirigé vers `/tmp`

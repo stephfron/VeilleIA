@@ -3,7 +3,7 @@ Répertoire National des Élus — sénateurs et députés.
 Source : API tabulaire data.gouv.fr (dataset 5c34c4d1634f4173183a64f1)
 """
 import pandas as pd
-from utils.cache import load, save
+from utils.cache import load, memoize, save
 from utils.config import RNE_BASE_URL, RNE_PAGE_SIZE, RNE_RESOURCE_IDS
 from utils.data_cleaning import normalize_dept_column
 from utils.http import get_with_retry
@@ -88,8 +88,13 @@ def get_deputes() -> pd.DataFrame:
     return df
 
 
+@memoize()
 def get_parlementaires() -> pd.DataFrame:
-    """Sénateurs + Députés fusionnés avec colonne `chambre`."""
+    """
+    Sénateurs + Députés fusionnés avec colonne `chambre` (mémoïsé en RAM).
+    Le RNE ne référence que les mandats en cours : tous les élus retournés
+    sont en activité.
+    """
     sen = get_senateurs().assign(chambre="Sénat")
     dep = get_deputes().assign(chambre="Assemblée nationale")
     return pd.concat([sen, dep], ignore_index=True)

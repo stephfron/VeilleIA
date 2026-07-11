@@ -35,7 +35,7 @@ def test_categories(client):
 
 
 def test_parlementaires_nan_becomes_null(client, monkeypatch):
-    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q: [FICHE])
+    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q, limit=20: [FICHE])
     body = client.get("/api/parlementaires", params={"q": "dupont"}).json()
     assert body["count"] == 1
     assert body["results"][0]["parlementaire"]["libelle_csp"] is None
@@ -44,7 +44,7 @@ def test_parlementaires_nan_becomes_null(client, monkeypatch):
 
 def test_parlementaires_filtre_chambre(client, monkeypatch):
     autre = {**FICHE, "parlementaire": {**FICHE["parlementaire"], "chambre": "Assemblée nationale"}}
-    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q: [FICHE, autre])
+    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q, limit=20: [FICHE, autre])
     body = client.get("/api/parlementaires", params={"q": "dupont", "chambre": "Sénat"}).json()
     assert body["count"] == 1
     assert body["results"][0]["parlementaire"]["chambre"] == "Sénat"
@@ -60,7 +60,7 @@ def test_parlementaires_query_vide(client):
 
 
 def test_parlementaires_service_down(client, monkeypatch):
-    def boom(q):
+    def boom(q, limit=20):
         raise RuntimeError("réseau KO")
     monkeypatch.setattr(main, "rechercher_parlementaire", boom)
     resp = client.get("/api/parlementaires", params={"q": "dupont"})

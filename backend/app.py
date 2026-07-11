@@ -69,11 +69,12 @@ def categories() -> dict[str, str]:
 def parlementaires(
     q: str = Query(min_length=1, description="Nom, code ou libellé de département"),
     chambre: str | None = Query(default=None, description="Sénat ou Assemblée nationale"),
+    limit: int = Query(default=20, ge=1, le=50, description="Nb max de fiches (borne les fetchs SIRENE)"),
 ) -> dict:
     if chambre is not None and chambre not in CHAMBRES:
         raise HTTPException(status_code=422, detail=f"chambre doit être l'une de : {sorted(CHAMBRES)}")
     try:
-        fiches = rechercher_parlementaire(q)
+        fiches = rechercher_parlementaire(q, limit=limit)
     except Exception:
         logger.exception("Échec rechercher_parlementaire(q=%r)", q)
         raise HTTPException(status_code=502, detail="Service RNE/SIRENE indisponible, réessayez plus tard.")

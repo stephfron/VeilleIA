@@ -20,6 +20,14 @@ ROOT_DIR = Path(__file__).parent.parent
 _DEFAULT_RAW = Path("/tmp/veilleia/raw") if os.getenv("VERCEL") else ROOT_DIR / "data" / "raw"
 DATA_RAW_DIR = Path(_get_secret("DATA_RAW_DIR", str(_DEFAULT_RAW)))
 DATA_PROCESSED_DIR = ROOT_DIR / "data" / "processed"
+# Snapshot committé (RNE + DOLE) servi quand le cache est vide — évite de
+# repayer les téléchargements à chaque cold start serverless.
+DATA_SEED_DIR = ROOT_DIR / "data" / "seed"
+
+# ---------------------------------------------------------------------------
+# Mémoïsation en RAM des DataFrames parsés (instance serverless chaude)
+# ---------------------------------------------------------------------------
+MEMO_TTL: int = 3_600           # 1 h en secondes
 
 # ---------------------------------------------------------------------------
 # Cache

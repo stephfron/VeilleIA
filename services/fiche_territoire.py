@@ -14,10 +14,12 @@ from services.api_sirene import resume_industrie_dept
 from utils.data_cleaning import fmt_date
 
 
-def rechercher_parlementaire(query: str) -> list[dict]:
+def rechercher_parlementaire(query: str, limit: int = 20) -> list[dict]:
     """
     Recherche un parlementaire par nom, code département ou libellé département.
-    Retourne une liste de fiches (homonymie possible → plusieurs résultats).
+    Retourne une liste de fiches (homonymie possible → plusieurs résultats),
+    plafonnée à `limit` : chaque fiche déclenche potentiellement un fetch
+    SIRENE complet du département (~1-3 min hors cache), il faut borner.
 
     Chaque fiche :
       parlementaire : nom, prénom, chambre, dept, circonscription, mandat, CSP
@@ -28,7 +30,14 @@ def rechercher_parlementaire(query: str) -> list[dict]:
     if matches.empty:
         return []
 
-    return [_build_fiche(row) for _, row in matches.iterrows() if _geo_key(row)]
+    fiches: list[dict] = []
+    for _, row in matches.iterrows():
+        if not _geo_key(row):
+            continue
+        fiches.append(_build_fiche(row))
+        if len(fiches) >= limit:
+            break
+    return fiches
 
 
 # ---------------------------------------------------------------------------

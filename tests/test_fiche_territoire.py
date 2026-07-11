@@ -71,3 +71,19 @@ def test_rechercher_parlementaire_builds_fiche(monkeypatch):
 def test_rechercher_parlementaire_no_match_returns_empty_list(monkeypatch):
     monkeypatch.setattr("services.fiche_territoire.get_parlementaires", lambda: _df())
     assert rechercher_parlementaire("introuvable") == []
+
+
+def test_rechercher_parlementaire_respecte_limit(monkeypatch):
+    monkeypatch.setattr("services.fiche_territoire.get_parlementaires", lambda: _df())
+    appels = []
+
+    def fake_resume(code_dept):
+        appels.append(code_dept)
+        return {"nb_etablissements": 0, "effectifs_estimes_total": 0, "top_naf": []}
+
+    monkeypatch.setattr("services.fiche_territoire.resume_industrie_dept", fake_resume)
+
+    fiches = rechercher_parlementaire("a", limit=2)  # "a" matche les 3 élus du jeu
+
+    assert len(fiches) == 2
+    assert len(appels) == 2  # les fetchs SIRENE au-delà de limit ne partent pas

@@ -7,7 +7,7 @@ Recherche par mots-clés sur titre + texte (ET implicite). Sans LLM, sans embedd
 """
 import time
 import pandas as pd
-from utils.cache import load, save
+from utils.cache import load, memoize, save
 from utils.config import (
     DOLE_HF_URL, DOLE_HF_DATASET, DOLE_HF_CONFIG,
     DOLE_PAGE_SIZE, DOLE_PAGE_DELAY,
@@ -68,8 +68,12 @@ def _fetch_all() -> pd.DataFrame:
     return df
 
 
+@memoize()
 def get_dole() -> pd.DataFrame:
-    """Retourne tous les textes DOLE (cache 24 h)."""
+    """
+    Retourne tous les textes DOLE (cache fichier 24 h + mémoïsation RAM —
+    le JSON fait ~8 Mo, le reparser à chaque recherche coûtait ~1-2 s).
+    """
     cached = load("dole")
     if cached is not None:
         df = pd.DataFrame(cached)
@@ -122,6 +126,7 @@ def rechercher_textes(
         df[mask]
         .sort_values("chunk_index")
         .drop_duplicates(subset="doc_id", keep="first")
+        .sort_values("creation_date", ascending=False)  # textes récents d'abord
         .head(top_n)
         .copy()
     )
