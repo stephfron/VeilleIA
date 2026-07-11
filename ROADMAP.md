@@ -30,7 +30,7 @@ Corrections :
   contrairement à `api_sirene.py`/`api_dole.py` → uniformisé
 - `utils/http.py` : `get_with_retry` ne gérait que les codes HTTP transitoires, pas les
   erreurs réseau (timeout, connexion) → retry + exception relevée après épuisement
-- `app.py` : erreurs réseau désormais journalisées (`logging`) avant d'afficher un message
+- `streamlit_app.py` : erreurs réseau désormais journalisées (`logging`) avant d'afficher un message
   générique à l'utilisateur — invisibles auparavant dans les logs serveur
 - **Bug réel trouvé en testant après refactor** : `page_fiche_territoire` plantait
   (`StreamlitDuplicateElementId`) dès qu'une recherche renvoyait plusieurs élus du même
@@ -45,7 +45,7 @@ Auth (`streamlit-authenticator`) câblée le 2026-07-11 — voir Phase 5, le blo
 
 ## Phase 2 — Interface Streamlit ✅ (squelette livré)
 
-### 2.1 `app.py` — Squelette et navigation ✅
+### 2.1 `streamlit_app.py` — Squelette et navigation ✅
 
 - Sidebar : navigation Accueil / Fiche territoire / Textes législatifs (`st.sidebar.radio`)
 - Page **Accueil** : hero + 3 cartes de raccourci
@@ -135,7 +135,7 @@ Livrable : `services/scoring.py`
 
 App privée (usage personnel) → authentification requise avant l'UI, câblée le 2026-07-11 :
 
-- `utils/auth.py` (`require_login()`) : gate toute l'app avec `streamlit-authenticator`, appelé en tête d'`app.py`
+- `utils/auth.py` (`require_login()`) : gate toute l'app avec `streamlit-authenticator`, appelé en tête d'`streamlit_app.py`
 - Credentials via variables d'environnement (déjà déclarées dans `render.yaml`, `sync: false` → à saisir dans le dashboard Render, déjà dans `.env` local) :
   - `AUTH_USERNAME`
   - `AUTH_PASSWORD_HASH` (hash bcrypt — jamais le mot de passe en clair)
