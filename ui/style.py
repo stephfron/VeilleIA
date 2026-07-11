@@ -17,7 +17,6 @@ def inject_css() -> None:
             letter-spacing: -0.02em;
             color: {COLORS['navy']};
         }}
-        p, span, div {{ color: {COLORS['navy']}; }}
 
         /* --- eyebrow "/ Label /" --- */
         .uimm-eyebrow {{

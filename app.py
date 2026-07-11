@@ -49,8 +49,12 @@ def page_fiche_territoire() -> None:
     if not query:
         return
 
-    with st.spinner("Recherche en cours…"):
-        fiches = rechercher_parlementaire(query)
+    try:
+        with st.spinner("Recherche en cours…"):
+            fiches = rechercher_parlementaire(query)
+    except Exception:
+        st.error("Service RNE/SIRENE indisponible, réessayez plus tard.")
+        return
 
     if not fiches:
         st.warning("Aucun résultat pour cette recherche.")
@@ -64,11 +68,11 @@ def page_fiche_territoire() -> None:
         )
         c1, c2 = st.columns(2)
         with c1:
-            stat_card(terr["nb_etablissements_industriels"], "Établissements industriels")
+            stat_card(terr.get("nb_etablissements_industriels", 0), "Établissements industriels")
         with c2:
-            stat_card(f'{terr["effectifs_estimes"]:,}'.replace(",", " "), "Effectifs estimés")
+            stat_card(f'{terr.get("effectifs_estimes", 0):,}'.replace(",", " "), "Effectifs estimés")
 
-        top_naf = terr["top_naf"]
+        top_naf = terr.get("top_naf", [])
         if top_naf:
             fig = go.Figure(
                 go.Bar(
@@ -98,8 +102,12 @@ def page_textes() -> None:
     if not query:
         return
 
-    with st.spinner("Recherche en cours…"):
-        results = rechercher_textes(query, categories=cats or None)
+    try:
+        with st.spinner("Recherche en cours…"):
+            results = rechercher_textes(query, categories=cats or None)
+    except Exception:
+        st.error("Service DOLE indisponible, réessayez plus tard.")
+        return
 
     if results.empty:
         st.warning("Aucun texte trouvé.")
@@ -111,4 +119,9 @@ def page_textes() -> None:
             texte_card(row["title"], row["category_label"], row["annee"], row["article_synthesis"])
 
 
-{"Accueil": page_accueil, "Fiche territoire": page_fiche_territoire, "Textes législatifs": page_textes}[page]()
+PAGES_MAP = {
+    "Accueil": page_accueil,
+    "Fiche territoire": page_fiche_territoire,
+    "Textes législatifs": page_textes,
+}
+PAGES_MAP[page]()
