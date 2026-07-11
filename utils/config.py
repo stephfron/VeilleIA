@@ -5,27 +5,10 @@ Importer depuis ici, jamais directement depuis os.getenv dans les services.
 import os
 from pathlib import Path
 
-try:
-    import streamlit as st
-except ImportError:
-    st = None
-
 
 def _get_secret(key: str, default: str = "") -> str:
-    """
-    Lit une variable de config, en tentant d'abord les variables d'environnement
-    (Render) puis st.secrets (Streamlit Community Cloud), qui n'expose pas
-    toujours ses secrets en variables d'environnement classiques.
-    """
-    val = os.getenv(key)
-    if val:
-        return val
-    if st is not None:
-        try:
-            return str(st.secrets.get(key, default))
-        except Exception:
-            return default
-    return default
+    """Lit une variable de config depuis l'environnement (.env chargé par l'API)."""
+    return os.getenv(key) or default
 
 # ---------------------------------------------------------------------------
 # Répertoires
@@ -83,17 +66,3 @@ DOLE_HF_CONFIG: str = "latest"
 DOLE_PAGE_SIZE: int = 100
 DOLE_PAGE_DELAY: float = 0.5     # Délai entre pages HF
 
-# ---------------------------------------------------------------------------
-# Authentification — streamlit-authenticator
-# Fail-closed : activée par défaut sur tout déploiement qui ne définit pas la
-# variable (Render, Streamlit Community Cloud, ou autre) ; à désactiver
-# explicitement (AUTH_ENABLED=false) uniquement sur un environnement de test,
-# via son propre .env / secrets.toml — jamais un défaut du dépôt.
-# ---------------------------------------------------------------------------
-_AUTH_ENABLED_RAW = _get_secret("AUTH_ENABLED", "true").strip().lower()
-if _AUTH_ENABLED_RAW not in ("true", "false"):
-    raise ValueError(f"AUTH_ENABLED doit valoir 'true' ou 'false', valeur reçue : {_AUTH_ENABLED_RAW!r}")
-AUTH_ENABLED: bool = _AUTH_ENABLED_RAW == "true"
-AUTH_USERNAME: str = _get_secret("AUTH_USERNAME")
-AUTH_PASSWORD_HASH: str = _get_secret("AUTH_PASSWORD_HASH")
-AUTH_COOKIE_KEY: str = _get_secret("AUTH_COOKIE_KEY")

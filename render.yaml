@@ -3,16 +3,10 @@ services:
     name: veilleia
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
+    # Le runtime Python natif de Render fournit aussi Node — le build front
+    # (Vite) est fait ici et servi statiquement par FastAPI (frontend/dist).
+    buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: INSEE_SIRENE_API_KEY
-        sync: false
-      - key: AUTH_ENABLED
-        value: "true"
-      - key: AUTH_USERNAME
-        sync: false
-      - key: AUTH_PASSWORD_HASH
-        sync: false
-      - key: AUTH_COOKIE_KEY
         sync: false

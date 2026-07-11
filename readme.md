@@ -2,7 +2,7 @@
 
 ## 1. Présentation
 
-VeilleIA est un dashboard Streamlit de **veille territoriale et institutionnelle**. Il agrège des données publiques françaises pour croiser le tissu économique local avec l'activité législative des élus.
+VeilleIA est une application web de **veille territoriale et institutionnelle**. Elle agrège des données publiques françaises pour croiser le tissu économique local avec l'activité législative des élus.
 
 **Aucune IA, aucun LLM. Données brutes → visualisation.**
 
@@ -10,12 +10,11 @@ VeilleIA est un dashboard Streamlit de **veille territoriale et institutionnelle
 
 | Composant | Technologie |
 |---|---|
-| Langage | Python 3.11 |
-| Interface | Streamlit |
-| Données | Pandas |
-| Visualisation | Plotly |
-| HTTP | requests |
-| Environnement | GitHub Codespaces |
+| Backend | Python 3.11 · FastAPI · Pandas |
+| Frontend | React 18 · TypeScript · Vite |
+| Visualisation | Recharts |
+| HTTP (services) | requests |
+| Tests | pytest (backend) |
 
 ---
 
@@ -25,16 +24,13 @@ VeilleIA est un dashboard Streamlit de **veille territoriale et institutionnelle
 APIs publiques
   ├── RNE (data.gouv.fr)     → élus / mandats / circonscriptions
   ├── SIRENE (INSEE)          → entreprises / codes NAF / départements
-  └── DOLE (data.gouv.fr)    → textes de loi / amendements
+  └── DOLE (HuggingFace)      → textes de loi / dossiers législatifs
 
-        ↓  services/*.py  (fetch + cache local)
+        ↓  services/*.py  (fetch + cache local 24 h, data/raw/)
 
-    data/raw/               → JSON/CSV bruts
-    data/processed/         → DataFrames nettoyés (Parquet)
+        ↓  api/main.py  (FastAPI — /api/parlementaires, /api/textes)
 
-        ↓  utils/           (nettoyage, harmonisation)
-
-    streamlit_app.py        → Streamlit UI + Plotly
+    frontend/ (React + Vite)  → UI + Recharts
 ```
 
 **Clé de jointure : Code Département** (harmonisé dans `utils/data_cleaning.py`).
@@ -45,50 +41,59 @@ APIs publiques
 
 ```
 VeilleIA/
-├── .devcontainer/
-│   └── devcontainer.json
-├── data/
-│   ├── raw/
-│   └── processed/
+├── api/
+│   └── main.py             # API FastAPI + service statique du build React
 ├── services/
 │   ├── api_rne.py          # Élus par département/mandat
 │   ├── api_sirene.py       # Entreprises par NAF/département
-│   └── api_dole.py         # Textes de loi, amendements
+│   ├── api_dole.py         # Textes de loi (recherche mots-clés)
+│   └── fiche_territoire.py # Croisement RNE × SIRENE
 ├── utils/
+│   ├── config.py           # Constantes + variables d'env centralisées
+│   ├── http.py             # Retry HTTP partagé
 │   ├── data_cleaning.py    # Harmonisation codes département
-│   └── cache.py            # Cache fichier (évite les appels répétés)
-├── streamlit_app.py        # Point d'entrée Streamlit
+│   └── cache.py            # Cache fichier 24 h (évite les appels répétés)
+├── frontend/
+│   ├── src/
+│   │   ├── pages/          # Accueil, FicheTerritoire, Textes
+│   │   ├── components/     # ui.tsx (design system), charts.tsx (Recharts)
+│   │   ├── api.ts          # Client HTTP typé
+│   │   └── styles/global.css  # Tokens design system UIMM (WCAG AA)
+│   ├── package.json
+│   └── vite.config.ts      # Proxy /api → localhost:8000 en dev
+├── tests/                  # pytest — services, utils, API (mockée)
 ├── requirements.txt
-└── readme.md
+└── render.yaml             # Déploiement Render (build front + uvicorn)
 ```
 
 ---
 
-## 4. Conventions
+## 4. Développement local
 
-- **Type hints** sur toutes les fonctions publiques
-- **Cache fichier** systématique sur les appels API (`data/raw/`) — zéro appel réseau superflu
-- `streamlit_app.py` = UI uniquement, aucune logique métier
+```bash
+# Backend (terminal 1)
+pip install -r requirements-dev.txt
+uvicorn api.main:app --reload --port 8000
+
+# Frontend (terminal 2)
+cd frontend && npm install && npm run dev   # http://localhost:5173
+
+# Tests backend
+pytest
+```
+
+En production, un seul process : `npm run build` génère `frontend/dist`, servi statiquement par FastAPI (voir `render.yaml`).
+
+Variables d'environnement (`.env` à la racine, chargé par `api/main.py`) :
+- `INSEE_SIRENE_API_KEY` — clé API SIRENE (reste côté serveur, jamais exposée au navigateur)
+
+---
+
+## 5. Conventions
+
+- **Type hints** sur toutes les fonctions publiques Python ; TypeScript `strict` côté front
+- **Cache fichier** systématique sur les appels API externes (`data/raw/`) — zéro appel réseau superflu
+- `api/` = validation des paramètres + sérialisation, aucune logique métier
 - `services/` = fetch + retour `pd.DataFrame` propre, rien d'autre
-- Gestion d'erreur réseau via `try/except` + `st.error()` dans l'UI
-
----
-
-## 5. Environnement Codespaces
-
-**`.devcontainer/devcontainer.json` :**
-- Image : `mcr.microsoft.com/devcontainers/python:3.11`
-- Extensions : `ms-python.python`, `charliermarsh.ruff`
-- PostCreate : `pip install -r requirements.txt`
-- Port forward : `8501` (Streamlit)
-
----
-
-## 6. Ordre d'implémentation
-
-1. `requirements.txt` + `.devcontainer/devcontainer.json`
-2. `utils/data_cleaning.py` + `utils/cache.py`
-3. `services/api_rne.py` → DataFrame élus
-4. `services/api_sirene.py` → DataFrame entreprises
-5. `services/api_dole.py` → DataFrame activité législative
-6. `streamlit_app.py` → UI Streamlit avec filtres département + graphiques Plotly
+- Erreurs réseau : journalisées côté serveur (`logging`), message générique côté client (502)
+- Palette et contrastes conformes WCAG 2.2 AA (tokens dans `frontend/src/styles/global.css`)

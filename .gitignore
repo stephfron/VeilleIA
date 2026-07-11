@@ -7,8 +7,10 @@ __pycache__/
 *.pyc
 .env
 
-# Streamlit
-.streamlit/secrets.toml
+# Frontend
+frontend/node_modules/
+frontend/dist/
 
 # Claude Code (config locale)
 .claude/settings.local.json
+frontend/tsconfig.tsbuildinfo

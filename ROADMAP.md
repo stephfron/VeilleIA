@@ -1,6 +1,30 @@
 # VeilleIA — Feuille de route
 
-## État actuel (branche `devapp`)
+## Refonte React (2026-07-11, branche `claude/refonte-react`)
+
+L'UI Streamlit est remplacée par une stack web moderne, **sans toucher à la couche
+données** (services/, utils/, cache, tests) qui reste la source unique de logique métier :
+
+| Couche | Avant | Après |
+|---|---|---|
+| UI | Streamlit + Plotly | React 18 + TypeScript + Vite + Recharts |
+| Serveur | streamlit run | FastAPI (`api/main.py`) + uvicorn |
+| Design system | ui/theme.py + inject_css | `frontend/src/styles/global.css` (mêmes tokens UIMM, WCAG AA) |
+| Auth | streamlit-authenticator (AUTH_ENABLED) | retirée — à réintroduire en middleware FastAPI si besoin (voir backlog) |
+
+- `api/main.py` : `/api/parlementaires`, `/api/textes`, `/api/categories` — validation
+  des paramètres, sérialisation JSON-safe (NaN → null), erreurs 502 journalisées ;
+  sert `frontend/dist` statiquement en production (une seule origine, pas de CORS en prod)
+- `frontend/` : 3 pages (Accueil, Fiche territoire, Textes législatifs), recherche avec
+  debounce 400 ms, filtres chambre/catégories/année, bouton Réinitialiser, navigation
+  React Router, responsive (sidebar → barre horizontale sur mobile)
+- Graphiques Recharts mono-série, couleur de barre validée (contraste ≥ 3:1), tooltip au survol
+- `tests/test_api.py` : 10 tests FastAPI (TestClient, services mockés — aucun réseau)
+- `render.yaml` : build front (npm ci + vite build) puis `uvicorn api.main:app`
+
+---
+
+## État antérieur (branche `devapp`)
 
 Pipeline de données opérationnel :
 
