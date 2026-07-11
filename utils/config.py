@@ -60,3 +60,10 @@ DOLE_HF_DATASET: str = "AgentPublic/dole"
 DOLE_HF_CONFIG: str = "latest"
 DOLE_PAGE_SIZE: int = 100
 DOLE_PAGE_DELAY: float = 0.5     # Délai entre pages HF
+
+# ---------------------------------------------------------------------------
+# Authentification — streamlit-authenticator
+# ---------------------------------------------------------------------------
+AUTH_USERNAME: str = os.getenv("AUTH_USERNAME", "")
+AUTH_PASSWORD_HASH: str = os.getenv("AUTH_PASSWORD_HASH", "")
+AUTH_COOKIE_KEY: str = os.getenv("AUTH_COOKIE_KEY", "")

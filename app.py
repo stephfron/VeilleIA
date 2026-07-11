@@ -12,12 +12,14 @@ from services.api_dole import rechercher_textes, CATEGORY_LABEL
 from ui.style import inject_css
 from ui.components import eyebrow, stat_card, texte_card, fiche_header, result_count
 from ui.theme import COLORS
+from utils.auth import require_login
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("veilleia")
 
 st.set_page_config(page_title="VeilleIA", page_icon="🏭", layout="wide")
 inject_css()
+require_login()
 
 st.sidebar.markdown(
     '<div style="font-weight:800; font-size:1.2rem; margin-bottom:1rem;">🏭 VeilleIA</div>',
