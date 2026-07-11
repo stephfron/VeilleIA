@@ -1,24 +1,19 @@
 """
 DOLE — Dossiers législatifs vectorisés.
-Source : AgentPublic/dole sur HuggingFace (via datasets-server API).
+Source : AgentPublic/dole sur HuggingFace (datasets-server API).
 
-4 343 chunks de textes législatifs (lois publiées, projets, propositions).
-Recherche par mots-clés sur titre + texte — sans embeddings, sans LLM.
+3 573 dossiers / 4 343 chunks — lois publiées, ordonnances, projets, propositions.
+Recherche par mots-clés sur titre + texte (ET implicite). Sans LLM, sans embeddings.
 """
 import time
-import requests
 import pandas as pd
-from utils.cache import get, set as cache_set
+from utils.cache import load, save
+from utils.config import (
+    DOLE_HF_URL, DOLE_HF_DATASET, DOLE_HF_CONFIG,
+    DOLE_PAGE_SIZE, DOLE_PAGE_DELAY,
+)
+from utils.http import get_with_retry
 
-_HF_URL = "https://datasets-server.huggingface.co/rows"
-_HF_PARAMS_BASE = {
-    "dataset": "AgentPublic/dole",
-    "config": "latest",
-    "split": "train",
-}
-_PAGE_SIZE = 100   # max autorisé par l'API HuggingFace datasets-server
-
-# Colonnes conservées (on exclut les embeddings ~2 ko par ligne)
 _KEEP_COLS = [
     "doc_id", "chunk_id", "chunk_index",
     "category", "content_type",
@@ -28,7 +23,7 @@ _KEEP_COLS = [
     "chunk_text",
 ]
 
-_CATEGORY_LABEL = {
+CATEGORY_LABEL: dict[str, str] = {
     "LOI_PUBLIEE":       "Loi publiée",
     "ORDONNANCE_PUBLIEE":"Ordonnance publiée",
     "PROJET_LOI":        "Projet de loi",
@@ -38,51 +33,50 @@ _CATEGORY_LABEL = {
 
 
 def _fetch_all() -> pd.DataFrame:
-    """Télécharge tous les chunks DOLE (sans embeddings), retourne un DataFrame."""
+    """Télécharge tous les chunks DOLE depuis HuggingFace (sans embeddings)."""
     records: list[dict] = []
     offset = 0
+
     while True:
-        for attempt in range(5):
-            resp = requests.get(
-                _HF_URL,
-                params={**_HF_PARAMS_BASE, "offset": offset, "length": _PAGE_SIZE},
-                timeout=30,
-            )
-            if resp.status_code in (502, 503, 429):
-                time.sleep(5 * (attempt + 1))
-                continue
-            break
+        resp = get_with_retry(
+            DOLE_HF_URL,
+            params={
+                "dataset": DOLE_HF_DATASET,
+                "config":  DOLE_HF_CONFIG,
+                "split":   "train",
+                "offset":  offset,
+                "length":  DOLE_PAGE_SIZE,
+            },
+            retryable=(429, 502, 503),
+            base_delay=5.0,
+        )
         resp.raise_for_status()
-        data = resp.json()
-        batch = data.get("rows", [])
+
+        batch = resp.json().get("rows", [])
         if not batch:
             break
-        for item in batch:
-            row = item["row"]
-            records.append({k: row.get(k) for k in _KEEP_COLS})
+
+        records.extend({k: row["row"].get(k) for k in _KEEP_COLS} for row in batch)
         offset += len(batch)
-        if len(batch) < _PAGE_SIZE:
+
+        if len(batch) < DOLE_PAGE_SIZE:
             break
-        time.sleep(0.5)   # délai entre pages pour éviter le rate-limit
+        time.sleep(DOLE_PAGE_DELAY)
 
     df = pd.DataFrame(records)
-    if "creation_date" in df.columns:
-        df["creation_date"] = pd.to_datetime(df["creation_date"], errors="coerce")
+    df["creation_date"] = pd.to_datetime(df["creation_date"], errors="coerce")
     return df
 
 
 def get_dole() -> pd.DataFrame:
-    """
-    Retourne tous les textes DOLE, depuis le cache ou HuggingFace.
-    Cache 24h (les données évoluent peu).
-    """
-    cached = get("dole")
+    """Retourne tous les textes DOLE (cache 24 h)."""
+    cached = load("dole")
     if cached is not None:
         df = pd.DataFrame(cached)
         df["creation_date"] = pd.to_datetime(df["creation_date"], errors="coerce")
         return df
     df = _fetch_all()
-    cache_set("dole", df.to_dict("records"))
+    save("dole", df.to_dict("records"))
     return df
 
 
@@ -93,59 +87,48 @@ def rechercher_textes(
     top_n: int = 20,
 ) -> pd.DataFrame:
     """
-    Recherche les textes législatifs contenant les mots-clés de `query`.
+    Recherche des textes législatifs par mots-clés (ET implicite entre les termes).
 
     Paramètres
     ----------
-    query       : mots-clés séparés par des espaces (tous doivent être présents)
-    categories  : filtre sur ['LOI_PUBLIEE', 'PROJET_LOI', 'PROPOSITION_LOI']
-    annee_min   : ne retourne que les textes à partir de cette année
-    top_n       : nombre maximum de résultats
+    query      : mots-clés libres (ex : "agroalimentaire", "industrie automobile")
+    categories : filtre sur les clés de CATEGORY_LABEL
+    annee_min  : année minimale de création
+    top_n      : nombre max de dossiers retournés (un dossier = un doc_id)
 
     Retourne
     --------
-    DataFrame avec colonnes : title, category_label, creation_date,
-                              article_title, article_synthesis, chunk_text, doc_id
+    DataFrame : title, category_label, annee, article_title,
+                article_synthesis, chunk_text, doc_id
     """
     df = get_dole()
 
-    # Filtre catégorie
     if categories:
         df = df[df["category"].isin(categories)]
 
-    # Filtre année
     if annee_min:
         df = df[df["creation_date"].dt.year >= annee_min]
 
-    # Recherche mots-clés (tous les termes doivent être présents — ET implicite)
-    # On cherche dans title + chunk_text, insensible à la casse
     mots = [m.strip() for m in query.lower().split() if m.strip()]
     if not mots:
         return pd.DataFrame()
 
-    search_corpus = (
-        df["title"].fillna("").str.lower()
-        + " "
-        + df["chunk_text"].fillna("").str.lower()
-    )
+    corpus = df["title"].fillna("").str.lower() + " " + df["chunk_text"].fillna("").str.lower()
     mask = pd.Series(True, index=df.index)
     for mot in mots:
-        mask = mask & search_corpus.str.contains(mot, regex=False, na=False)
+        mask &= corpus.str.contains(mot, regex=False, na=False)
 
-    results = df[mask].copy()
-
-    # Dédoublonnage par doc_id : on garde le chunk le plus pertinent (chunk_index=1)
     results = (
-        results.sort_values("chunk_index")
+        df[mask]
+        .sort_values("chunk_index")
         .drop_duplicates(subset="doc_id", keep="first")
         .head(top_n)
+        .copy()
     )
 
-    results["category_label"] = results["category"].map(_CATEGORY_LABEL).fillna(results["category"])
-    results["annee"] = results["creation_date"].dt.year
+    results["category_label"] = results["category"].map(CATEGORY_LABEL).fillna(results["category"])
+    results["annee"] = results["creation_date"].dt.year.astype("Int64")
 
-    return results[[
-        "title", "category_label", "annee",
-        "article_title", "article_synthesis",
-        "chunk_text", "doc_id",
-    ]].reset_index(drop=True)
+    return results[
+        ["title", "category_label", "annee", "article_title", "article_synthesis", "chunk_text", "doc_id"]
+    ].reset_index(drop=True)

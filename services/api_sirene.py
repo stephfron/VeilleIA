@@ -1,87 +1,47 @@
 """
 INSEE SIRENE — établissements industriels par territoire.
 API : https://api.insee.fr/api-sirene/3.11
-Auth : header X-INSEE-Api-Key-Integration (clé dans .env)
+Auth : header X-INSEE-Api-Key-Integration (clé dans .env → INSEE_SIRENE_API_KEY)
 
-Sections NAF couvertes (industrie manufacturière + extractive) :
+Sections NAF couvertes :
   B  05–09  Industries extractives
   C  10–33  Industries manufacturières
 """
-import os
 import time
-import requests
 import pandas as pd
-from utils.cache import get, set as cache_set
+from utils.cache import load, save
+from utils.config import (
+    SIRENE_BASE_URL, SIRENE_API_KEY,
+    SIRENE_PAGE_SIZE, SIRENE_MAX_OFFSET, SIRENE_DELAY, SIRENE_RETRY_DELAY,
+    SIRENE_NAF_PREFIXES, SIRENE_TRANCHE_MIDPOINT,
+)
+from utils.http import get_with_retry
 
-_BASE_URL = "https://api.insee.fr/api-sirene/3.11/siret"
-_PAGE_SIZE = 1000
-_MAX_OFFSET = 9000   # INSEE bloque au-delà de 10 000 résultats par requête
-_DELAY = 1.0         # secondes entre appels pour éviter le rate-limit
-_RETRY_DELAY = 10.0  # attente après un 429
-
-# Sections NAF industrie — 8 préfixes larges au lieu de 29 précis
-# "1*" couvre 10–19, "2*" couvre 20–29, puis 30/31/32/33 séparément
-# Section B (extractives) : 05–09
-_NAF_PREFIXES = ["05", "06", "07", "08", "09",   # Section B
-                 "1", "2",                        # Section C 10-29 (deux appels)
-                 "30", "31", "32", "33"]          # Section C 30-33
-
-# Midpoint salariés par tranche (estimation basse/haute moyennée)
-_TRANCHE_MIDPOINT: dict[str, int] = {
-    "NN": 0, "00": 0, "01": 1, "02": 4, "03": 7,
-    "11": 14, "12": 34, "21": 74, "22": 149,
-    "31": 224, "32": 374, "41": 749, "42": 1499,
-    "51": 3499, "52": 7499, "53": 15000,
-}
+_CHAMPS = (
+    "siret,trancheEffectifsEtablissement,"
+    "activitePrincipaleUniteLegale,"
+    "codePostalEtablissement,libelleCommuneEtablissement,"
+    "denominationUniteLegale"
+)
 
 
 def _headers() -> dict[str, str]:
-    key = os.getenv("INSEE_SIRENE_API_KEY", "")
-    return {"X-INSEE-Api-Key-Integration": key, "Accept": "application/json"}
+    return {"X-INSEE-Api-Key-Integration": SIRENE_API_KEY, "Accept": "application/json"}
 
 
 def _dept_to_cp_prefix(code_dept: str) -> str:
-    """Convertit un code département en préfixe de code postal SIRENE."""
+    """Code département → préfixe de code postal pour la requête Lucene."""
     if code_dept in ("2A", "2B"):
-        return "20"       # Corse : CP 20xxx (les deux depts partagent le préfixe)
-    return code_dept      # "01", "75", "971"… déjà formatés
+        return "20"   # Corse : CP 20xxx partagé entre les deux depts
+    return code_dept  # "01", "75", "971"… déjà au bon format
 
 
-def _fetch_naf_prefix(cp_prefix: str, naf_prefix: str) -> list[dict]:
-    """Récupère tous les établissements actifs d'un dept pour un préfixe NAF."""
-    q = (
+def _lucene_query(cp_prefix: str, naf_prefix: str) -> str:
+    return (
         f"codePostalEtablissement:{cp_prefix}* "
         f"AND periode(etatAdministratifEtablissement:A) "
         f"AND activitePrincipaleUniteLegale:{naf_prefix}*"
     )
-    records: list[dict] = []
-    debut = 0
-    while True:
-        resp = requests.get(
-            _BASE_URL,
-            headers=_headers(),
-            params={"q": q, "nombre": _PAGE_SIZE, "debut": debut,
-                    "champs": "siret,trancheEffectifsEtablissement,"
-                               "activitePrincipaleUniteLegale,"
-                               "codePostalEtablissement,libelleCommuneEtablissement,"
-                               "denominationUniteLegale"},
-            timeout=30,
-        )
-        if resp.status_code == 404:
-            break   # aucun établissement pour ce préfixe NAF dans ce département
-        if resp.status_code == 429:
-            time.sleep(_RETRY_DELAY)
-            continue  # retry la même page
-        resp.raise_for_status()
-        data = resp.json()
-        batch = data.get("etablissements") or []
-        records.extend(_flatten(e) for e in batch)
-        total = data.get("header", {}).get("total", 0)
-        debut += _PAGE_SIZE
-        if debut >= total or debut > _MAX_OFFSET:
-            break
-        time.sleep(_DELAY)
-    return records
 
 
 def _flatten(e: dict) -> dict:
@@ -89,25 +49,55 @@ def _flatten(e: dict) -> dict:
     ul = e.get("uniteLegale") or {}
     tranche = e.get("trancheEffectifsEtablissement") or "NN"
     return {
-        "siret": e.get("siret"),
-        "naf": ul.get("activitePrincipaleUniteLegale"),
-        "nom": ul.get("denominationUniteLegale"),
-        "code_postal": addr.get("codePostalEtablissement"),
-        "commune": addr.get("libelleCommuneEtablissement"),
+        "siret":             e.get("siret"),
+        "naf":               ul.get("activitePrincipaleUniteLegale"),
+        "nom":               ul.get("denominationUniteLegale"),
+        "code_postal":       addr.get("codePostalEtablissement"),
+        "commune":           addr.get("libelleCommuneEtablissement"),
         "tranche_effectifs": tranche,
-        "effectifs_estimes": _TRANCHE_MIDPOINT.get(tranche, 0),
+        "effectifs_estimes": SIRENE_TRANCHE_MIDPOINT.get(tranche, 0),
     }
+
+
+def _fetch_naf_prefix(cp_prefix: str, naf_prefix: str) -> list[dict]:
+    """Télécharge tous les établissements actifs d'un dept pour un préfixe NAF."""
+    q = _lucene_query(cp_prefix, naf_prefix)
+    records: list[dict] = []
+    debut = 0
+
+    while True:
+        resp = get_with_retry(
+            SIRENE_BASE_URL,
+            headers=_headers(),
+            params={"q": q, "nombre": SIRENE_PAGE_SIZE, "debut": debut, "champs": _CHAMPS},
+            retryable=(429,),
+            base_delay=SIRENE_RETRY_DELAY,
+        )
+        if resp.status_code == 404:
+            break   # Aucun résultat pour ce préfixe NAF dans ce département
+        resp.raise_for_status()
+
+        data = resp.json()
+        batch = data.get("etablissements") or []
+        records.extend(_flatten(e) for e in batch)
+
+        total = data.get("header", {}).get("total", 0)
+        debut += SIRENE_PAGE_SIZE
+        if debut >= total or debut > SIRENE_MAX_OFFSET:
+            break
+        time.sleep(SIRENE_DELAY)
+
+    return records
 
 
 def get_industrie_dept(code_dept: str) -> pd.DataFrame:
     """
     Retourne tous les établissements industriels actifs d'un département.
-    Colonnes : siret, naf, nom, code_postal, commune,
-               tranche_effectifs, effectifs_estimes
-    Cache 24h par département.
+    Colonnes : siret, naf, nom, code_postal, commune, tranche_effectifs, effectifs_estimes
+    Cache 24 h.
     """
     cache_key = f"sirene_industrie_{code_dept}"
-    cached = get(cache_key)
+    cached = load(cache_key)
     if cached is not None:
         return pd.DataFrame(cached)
 
@@ -115,24 +105,23 @@ def get_industrie_dept(code_dept: str) -> pd.DataFrame:
     seen: set[str] = set()
     records: list[dict] = []
 
-    for naf_prefix in _NAF_PREFIXES:
-        batch = _fetch_naf_prefix(cp_prefix, naf_prefix)
-        for rec in batch:
+    for naf_prefix in SIRENE_NAF_PREFIXES:
+        for rec in _fetch_naf_prefix(cp_prefix, naf_prefix):
             siret = rec.get("siret") or ""
             if siret and siret not in seen:
                 seen.add(siret)
                 records.append(rec)
 
-    df = pd.DataFrame(records) if records else pd.DataFrame(columns=list(_flatten({}).keys()))
-    cache_set(cache_key, df.to_dict("records"))
+    _EMPTY_COLS = list(_flatten({}).keys())
+    df = pd.DataFrame(records) if records else pd.DataFrame(columns=_EMPTY_COLS)
+    save(cache_key, df.to_dict("records"))
     return df
 
 
 def resume_industrie_dept(code_dept: str) -> dict:
     """
     Résumé agrégé pour un département :
-      nb_etablissements, effectifs_estimes_total,
-      top_naf (5 codes les plus fréquents avec libellé court)
+      nb_etablissements, effectifs_estimes_total, top_naf (5 codes)
     """
     df = get_industrie_dept(code_dept)
     if df.empty:
@@ -148,7 +137,7 @@ def resume_industrie_dept(code_dept: str) -> dict:
     )
 
     return {
-        "nb_etablissements": len(df),
+        "nb_etablissements":      len(df),
         "effectifs_estimes_total": int(df["effectifs_estimes"].sum()),
-        "top_naf": top_naf,
+        "top_naf":                top_naf,
     }

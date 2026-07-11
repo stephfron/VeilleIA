@@ -3,3 +3,4 @@ pandas==2.2.3
 plotly==6.1.2
 requests==2.32.4
 pyarrow==20.0.0
+python-dotenv==1.1.0
