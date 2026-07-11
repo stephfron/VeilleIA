@@ -1,7 +1,7 @@
 """Authentification de l'app — gate l'accès avant toute page."""
 import streamlit as st
 import streamlit_authenticator as stauth
-from utils.config import AUTH_USERNAME, AUTH_PASSWORD_HASH, AUTH_COOKIE_KEY
+from utils.config import AUTH_ENABLED, AUTH_USERNAME, AUTH_PASSWORD_HASH, AUTH_COOKIE_KEY
 
 
 def require_login() -> None:
@@ -9,7 +9,12 @@ def require_login() -> None:
     Affiche un formulaire de connexion et arrête le script (st.stop()) tant que
     l'utilisateur n'est pas authentifié. Credentials attendus en variables d'env
     (AUTH_USERNAME, AUTH_PASSWORD_HASH, AUTH_COOKIE_KEY) — voir render.yaml.
+
+    Ignorée si AUTH_ENABLED n'est pas activé (environnement de test).
     """
+    if not AUTH_ENABLED:
+        return
+
     if not (AUTH_USERNAME and AUTH_PASSWORD_HASH and AUTH_COOKIE_KEY):
         st.error(
             "Authentification non configurée : AUTH_USERNAME, AUTH_PASSWORD_HASH "

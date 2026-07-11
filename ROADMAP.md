@@ -145,6 +145,21 @@ App privée (usage personnel) → authentification requise avant l'UI, câblée 
 Testé en local (Playwright) : accès bloqué sans identifiants, rejeté avec un mauvais mot de
 passe, accordé avec les bons + déconnexion fonctionnelle.
 
+**Auth rendue optionnelle (2026-07-11)** — `AUTH_ENABLED` (`utils/config.py`) pilote le gate,
+**fail-closed** : activée par défaut (valeur `"true"` si la variable n'est pas définie), pour
+qu'un déploiement qui oublie de la configurer (Render, Streamlit Community Cloud, ou tout futur
+environnement) reste protégé au lieu de se retrouver public sans login par défaut. Valeur brute
+validée strictement (`"true"`/`"false"` uniquement, sinon `ValueError` au démarrage — pas de
+défaut silencieux). `require_login()` retourne immédiatement si désactivée ; un badge sidebar
+« Authentification désactivée » s'affiche pour rendre l'état visible.
+
+Pour désactiver l'auth sur **un environnement de test précis** (jamais par défaut dans le
+dépôt) : définir `AUTH_ENABLED=false` dans le `.env` local ou les secrets de cette plateforme
+uniquement (`.env` est gitignored). `render.yaml` fixe `AUTH_ENABLED=true` explicitement pour
+le service Render de production — après un merge touchant `render.yaml`, vérifier dans le
+dashboard Render qu'un Sync manuel du Blueprint a bien propagé la variable au service déjà
+provisionné (Render ne le fait pas toujours rétroactivement).
+
 Le tier gratuit Render met l'instance en veille après inactivité (cold start ~30-50s au réveil) — acceptable pour un usage personnel.
 
 **Reste à faire pour déployer réellement** (action manuelle sur render.com, hors du dépôt) :

@@ -8,6 +8,8 @@ services:
     envVars:
       - key: INSEE_SIRENE_API_KEY
         sync: false
+      - key: AUTH_ENABLED
+        value: "true"
       - key: AUTH_USERNAME
         sync: false
       - key: AUTH_PASSWORD_HASH

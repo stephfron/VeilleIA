@@ -13,6 +13,7 @@ from ui.style import inject_css
 from ui.components import eyebrow, stat_card, texte_card, fiche_header, result_count
 from ui.theme import COLORS
 from utils.auth import require_login
+from utils.config import AUTH_ENABLED
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("veilleia")
@@ -25,8 +26,20 @@ st.sidebar.markdown(
     '<div style="font-weight:800; font-size:1.2rem; margin-bottom:1rem;">🏭 VeilleIA</div>',
     unsafe_allow_html=True,
 )
+if not AUTH_ENABLED:
+    st.sidebar.warning("Authentification désactivée — environnement de test.", icon="🔓")
+
 PAGES = ["Accueil", "Fiche territoire", "Textes législatifs"]
-page = st.sidebar.radio("Navigation", PAGES, label_visibility="collapsed")
+PAGE_ICONS = {"Accueil": "🏠", "Fiche territoire": "📍", "Textes législatifs": "📜"}
+
+if "pending_nav" in st.session_state:
+    st.session_state["nav_page"] = st.session_state.pop("pending_nav")
+st.session_state.setdefault("nav_page", "Accueil")
+page = st.sidebar.radio(
+    "Navigation", PAGES, key="nav_page",
+    format_func=lambda p: f"{PAGE_ICONS[p]} {p}",
+    label_visibility="collapsed",
+)
 
 
 def page_accueil() -> None:
@@ -41,26 +54,42 @@ def page_accueil() -> None:
     )
     cols = st.columns(3)
     shortcuts = [
-        ("Fiche territoire", "Élus, établissements industriels et effectifs par département."),
-        ("Textes législatifs", "Lois, ordonnances et propositions filtrables par mots-clés."),
-        ("Données publiques", "RNE, SIRENE (INSEE) et DOLE — actualisées toutes les 24 h."),
+        ("Fiche territoire", "Élus, établissements industriels et effectifs par département.", "Fiche territoire"),
+        ("Textes législatifs", "Lois, ordonnances et propositions filtrables par mots-clés.", "Textes législatifs"),
+        ("Données publiques", "RNE, SIRENE (INSEE) et DOLE — actualisées toutes les 24 h.", None),
     ]
-    for col, (titre, desc) in zip(cols, shortcuts):
+    for col, (titre, desc, target) in zip(cols, shortcuts):
         with col:
+            icone = PAGE_ICONS.get(target, "📊")
             st.markdown(
-                f'<div class="uimm-card"><h4>{titre}</h4>'
+                f'<div class="uimm-card"><h4>{icone} {titre}</h4>'
                 f'<p class="uimm-card__muted">{desc}</p></div>',
                 unsafe_allow_html=True,
             )
+            if target:
+                if st.button("Ouvrir →", key=f"home-goto-{target}", use_container_width=True):
+                    st.session_state["pending_nav"] = target
+                    st.rerun()
+
+
+def _reset_fiche_territoire() -> None:
+    st.session_state["ft_query"] = ""
+    st.session_state["ft_chambre"] = "Les deux"
 
 
 def page_fiche_territoire() -> None:
     eyebrow("Recherche")
-    c_query, c_chambre = st.columns([3, 1])
+    c_query, c_chambre, c_reset = st.columns([3, 1, 0.7])
     with c_query:
-        query = st.text_input("Nom, département ou code département", placeholder="ex : Dupont, 69, Rhône")
+        query = st.text_input(
+            "Nom, département ou code département",
+            placeholder="ex : Dupont, 69, Rhône", key="ft_query",
+        )
     with c_chambre:
-        chambre = st.selectbox("Chambre", ["Les deux", "Sénat", "Assemblée nationale"])
+        chambre = st.selectbox("Chambre", ["Les deux", "Sénat", "Assemblée nationale"], key="ft_chambre")
+    with c_reset:
+        st.markdown('<div style="height:1.85rem"></div>', unsafe_allow_html=True)
+        st.button("Réinitialiser", key="ft_reset", on_click=_reset_fiche_territoire, use_container_width=True)
     if not query:
         return
 
@@ -114,16 +143,27 @@ def page_fiche_territoire() -> None:
         st.divider()
 
 
+def _reset_textes() -> None:
+    st.session_state["tx_query"] = ""
+    st.session_state["tx_cats"] = []
+    st.session_state["tx_annee"] = 1990
+
+
 def page_textes() -> None:
     eyebrow("Recherche")
-    c_query, c_cats, c_annee = st.columns([2, 2, 1])
+    c_query, c_cats, c_annee, c_reset = st.columns([2, 2, 1, 0.8])
     with c_query:
-        query = st.text_input("Mots-clés", placeholder="ex : industrie automobile, décarbonation")
+        query = st.text_input(
+            "Mots-clés", placeholder="ex : industrie automobile, décarbonation", key="tx_query",
+        )
     with c_cats:
         cats = st.multiselect("Catégorie", options=list(CATEGORY_LABEL.keys()),
-                               format_func=lambda k: CATEGORY_LABEL[k])
+                               format_func=lambda k: CATEGORY_LABEL[k], key="tx_cats")
     with c_annee:
-        annee_min = st.number_input("Année min.", min_value=1990, max_value=2030, value=1990, step=1)
+        annee_min = st.number_input("Année min.", min_value=1990, max_value=2030, step=1, key="tx_annee")
+    with c_reset:
+        st.markdown('<div style="height:1.85rem"></div>', unsafe_allow_html=True)
+        st.button("Réinitialiser", key="tx_reset", on_click=_reset_textes, use_container_width=True)
     if not query:
         return
 

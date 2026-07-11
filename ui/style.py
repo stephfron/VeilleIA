@@ -1,6 +1,6 @@
 """CSS global — reskin des composants Streamlit natifs + classes réutilisables."""
 import streamlit as st
-from ui.theme import COLORS, FONT_IMPORT_URL, FONT_FAMILY
+from ui.theme import COLORS, FONT_IMPORT_URL, FONT_FAMILY, SHADOW
 
 
 def inject_css() -> None:
@@ -54,8 +54,10 @@ def inject_css() -> None:
             border-radius: 1rem;
             padding: 1.25rem 1.4rem;
             height: 100%;
-            box-shadow: 0 1px 2px rgba(23,26,31,0.04);
+            box-shadow: {SHADOW['card']};
+            transition: box-shadow 0.15s ease;
         }}
+        .uimm-card:hover {{ box-shadow: {SHADOW['raised']}; }}
         .uimm-card h4 {{ margin: 0.5rem 0 0.35rem 0; font-size: 1.05rem; }}
         .uimm-card__muted {{ color: {COLORS['muted']}; font-size: 0.9rem; }}
 
