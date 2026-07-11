@@ -12,6 +12,13 @@ def _cache_path(key: str) -> Path:
     return RAW_DIR / f"{key}.json"
 
 
+def _json_default(obj):
+    """Sérialise les types non natifs JSON (Timestamp, date…)."""
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    raise TypeError(f"Type non sérialisable : {type(obj)}")
+
+
 def get(key: str) -> dict | list | None:
     path = _cache_path(key)
     if not path.exists():
@@ -22,4 +29,7 @@ def get(key: str) -> dict | list | None:
 
 
 def set(key: str, data: dict | list) -> None:
-    _cache_path(key).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    _cache_path(key).write_text(
+        json.dumps(data, ensure_ascii=False, default=_json_default),
+        encoding="utf-8",
+    )

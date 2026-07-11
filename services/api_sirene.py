@@ -1,118 +1,154 @@
 """
-Recherche d'entreprises — recherche-entreprises.api.gouv.fr
-Source SIRENE (INSEE) via API publique, sans authentification.
+INSEE SIRENE — établissements industriels par territoire.
+API : https://api.insee.fr/api-sirene/3.11
+Auth : header X-INSEE-Api-Key-Integration (clé dans .env)
+
+Sections NAF couvertes (industrie manufacturière + extractive) :
+  B  05–09  Industries extractives
+  C  10–33  Industries manufacturières
 """
+import os
+import time
 import requests
 import pandas as pd
 from utils.cache import get, set as cache_set
 
-_BASE_URL = "https://recherche-entreprises.api.gouv.fr/search"
-_DEFAULT_PER_PAGE = 25
-_MAX_PER_PAGE = 25  # limite API
+_BASE_URL = "https://api.insee.fr/api-sirene/3.11/siret"
+_PAGE_SIZE = 1000
+_MAX_OFFSET = 9000   # INSEE bloque au-delà de 10 000 résultats par requête
+_DELAY = 1.0         # secondes entre appels pour éviter le rate-limit
+_RETRY_DELAY = 10.0  # attente après un 429
+
+# Sections NAF industrie — 8 préfixes larges au lieu de 29 précis
+# "1*" couvre 10–19, "2*" couvre 20–29, puis 30/31/32/33 séparément
+# Section B (extractives) : 05–09
+_NAF_PREFIXES = ["05", "06", "07", "08", "09",   # Section B
+                 "1", "2",                        # Section C 10-29 (deux appels)
+                 "30", "31", "32", "33"]          # Section C 30-33
+
+# Midpoint salariés par tranche (estimation basse/haute moyennée)
+_TRANCHE_MIDPOINT: dict[str, int] = {
+    "NN": 0, "00": 0, "01": 1, "02": 4, "03": 7,
+    "11": 14, "12": 34, "21": 74, "22": 149,
+    "31": 224, "32": 374, "41": 749, "42": 1499,
+    "51": 3499, "52": 7499, "53": 15000,
+}
 
 
-def search_entreprises(
-    q: str = "",
-    departement: str | None = None,
-    code_naf: str | None = None,
-    page: int = 1,
-    per_page: int = _DEFAULT_PER_PAGE,
-) -> dict:
+def _headers() -> dict[str, str]:
+    key = os.getenv("INSEE_SIRENE_API_KEY", "")
+    return {"X-INSEE-Api-Key-Integration": key, "Accept": "application/json"}
+
+
+def _dept_to_cp_prefix(code_dept: str) -> str:
+    """Convertit un code département en préfixe de code postal SIRENE."""
+    if code_dept in ("2A", "2B"):
+        return "20"       # Corse : CP 20xxx (les deux depts partagent le préfixe)
+    return code_dept      # "01", "75", "971"… déjà formatés
+
+
+def _fetch_naf_prefix(cp_prefix: str, naf_prefix: str) -> list[dict]:
+    """Récupère tous les établissements actifs d'un dept pour un préfixe NAF."""
+    q = (
+        f"codePostalEtablissement:{cp_prefix}* "
+        f"AND periode(etatAdministratifEtablissement:A) "
+        f"AND activitePrincipaleUniteLegale:{naf_prefix}*"
+    )
+    records: list[dict] = []
+    debut = 0
+    while True:
+        resp = requests.get(
+            _BASE_URL,
+            headers=_headers(),
+            params={"q": q, "nombre": _PAGE_SIZE, "debut": debut,
+                    "champs": "siret,trancheEffectifsEtablissement,"
+                               "activitePrincipaleUniteLegale,"
+                               "codePostalEtablissement,libelleCommuneEtablissement,"
+                               "denominationUniteLegale"},
+            timeout=30,
+        )
+        if resp.status_code == 404:
+            break   # aucun établissement pour ce préfixe NAF dans ce département
+        if resp.status_code == 429:
+            time.sleep(_RETRY_DELAY)
+            continue  # retry la même page
+        resp.raise_for_status()
+        data = resp.json()
+        batch = data.get("etablissements") or []
+        records.extend(_flatten(e) for e in batch)
+        total = data.get("header", {}).get("total", 0)
+        debut += _PAGE_SIZE
+        if debut >= total or debut > _MAX_OFFSET:
+            break
+        time.sleep(_DELAY)
+    return records
+
+
+def _flatten(e: dict) -> dict:
+    addr = e.get("adresseEtablissement") or {}
+    ul = e.get("uniteLegale") or {}
+    tranche = e.get("trancheEffectifsEtablissement") or "NN"
+    return {
+        "siret": e.get("siret"),
+        "naf": ul.get("activitePrincipaleUniteLegale"),
+        "nom": ul.get("denominationUniteLegale"),
+        "code_postal": addr.get("codePostalEtablissement"),
+        "commune": addr.get("libelleCommuneEtablissement"),
+        "tranche_effectifs": tranche,
+        "effectifs_estimes": _TRANCHE_MIDPOINT.get(tranche, 0),
+    }
+
+
+def get_industrie_dept(code_dept: str) -> pd.DataFrame:
     """
-    Recherche d'entreprises avec filtres optionnels.
-
-    Retourne le dict brut de l'API :
-      {
-        "results": [...],
-        "total_results": int,
-        "page": int,
-        "per_page": int,
-        "total_pages": int,
-      }
-
-    Paramètres
-    ----------
-    q           : terme libre (raison sociale, SIREN, SIRET…)
-    departement : code département, ex. "75", "2A"
-    code_naf    : code APE/NAF, ex. "2030Z"
-    page        : numéro de page (base 1)
-    per_page    : résultats par page (max 25)
+    Retourne tous les établissements industriels actifs d'un département.
+    Colonnes : siret, naf, nom, code_postal, commune,
+               tranche_effectifs, effectifs_estimes
+    Cache 24h par département.
     """
-    params: dict = {"page": page, "per_page": min(per_page, _MAX_PER_PAGE)}
-    if q:
-        params["q"] = q
-    if departement:
-        params["departement"] = departement
-    if code_naf:
-        params["activite_principale"] = code_naf
-
-    resp = requests.get(_BASE_URL, params=params, timeout=15)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def get_entreprises_dept(
-    departement: str,
-    code_naf: str | None = None,
-    max_pages: int = 4,
-) -> pd.DataFrame:
-    """
-    Récupère toutes les entreprises d'un département (jusqu'à max_pages pages).
-    Met en cache par clé `sirene_{departement}_{code_naf or 'all'}`.
-
-    Colonnes retournées (sélection) :
-      siren, nom_complet, siege_adresse, siege_code_postal, siege_commune,
-      activite_principale, date_creation, etat_administratif,
-      tranche_effectif_salarie, categorie_entreprise
-    """
-    naf_key = code_naf or "all"
-    cache_key = f"sirene_{departement}_{naf_key}"
-
+    cache_key = f"sirene_industrie_{code_dept}"
     cached = get(cache_key)
     if cached is not None:
         return pd.DataFrame(cached)
 
+    cp_prefix = _dept_to_cp_prefix(code_dept)
+    seen: set[str] = set()
     records: list[dict] = []
-    for p in range(1, max_pages + 1):
-        data = search_entreprises(
-            departement=departement, code_naf=code_naf, page=p, per_page=_MAX_PER_PAGE
-        )
-        batch = data.get("results", [])
-        records.extend(_flatten(r) for r in batch)
-        if p >= data.get("total_pages", 1):
-            break
 
-    df = pd.DataFrame(records) if records else pd.DataFrame(columns=_COLUMNS)
+    for naf_prefix in _NAF_PREFIXES:
+        batch = _fetch_naf_prefix(cp_prefix, naf_prefix)
+        for rec in batch:
+            siret = rec.get("siret") or ""
+            if siret and siret not in seen:
+                seen.add(siret)
+                records.append(rec)
+
+    df = pd.DataFrame(records) if records else pd.DataFrame(columns=list(_flatten({}).keys()))
     cache_set(cache_key, df.to_dict("records"))
     return df
 
 
-_COLUMNS = [
-    "siren",
-    "nom_complet",
-    "siege_adresse",
-    "siege_code_postal",
-    "siege_commune",
-    "activite_principale",
-    "date_creation",
-    "etat_administratif",
-    "tranche_effectif_salarie",
-    "categorie_entreprise",
-]
+def resume_industrie_dept(code_dept: str) -> dict:
+    """
+    Résumé agrégé pour un département :
+      nb_etablissements, effectifs_estimes_total,
+      top_naf (5 codes les plus fréquents avec libellé court)
+    """
+    df = get_industrie_dept(code_dept)
+    if df.empty:
+        return {"nb_etablissements": 0, "effectifs_estimes_total": 0, "top_naf": []}
 
+    top_naf = (
+        df.groupby("naf")
+        .agg(nb=("siret", "count"), effectifs=("effectifs_estimes", "sum"))
+        .sort_values("nb", ascending=False)
+        .head(5)
+        .reset_index()
+        .to_dict("records")
+    )
 
-def _flatten(r: dict) -> dict:
-    """Extrait les champs utiles d'un résultat API."""
-    siege = r.get("siege") or {}
     return {
-        "siren": r.get("siren"),
-        "nom_complet": r.get("nom_complet"),
-        "siege_adresse": siege.get("adresse"),
-        "siege_code_postal": siege.get("code_postal"),
-        "siege_commune": siege.get("libelle_commune"),
-        "activite_principale": r.get("activite_principale"),
-        "date_creation": r.get("date_creation"),
-        "etat_administratif": r.get("etat_administratif"),
-        "tranche_effectif_salarie": r.get("tranche_effectif_salarie"),
-        "categorie_entreprise": r.get("categorie_entreprise"),
+        "nb_etablissements": len(df),
+        "effectifs_estimes_total": int(df["effectifs_estimes"].sum()),
+        "top_naf": top_naf,
     }
