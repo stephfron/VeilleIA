@@ -2,6 +2,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -10,6 +12,9 @@ from services.api_dole import rechercher_textes, CATEGORY_LABEL
 from ui.style import inject_css
 from ui.components import eyebrow, stat_card, texte_card, fiche_header, result_count
 from ui.theme import COLORS
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("veilleia")
 
 st.set_page_config(page_title="VeilleIA", page_icon="🏭", layout="wide")
 inject_css()
@@ -61,6 +66,7 @@ def page_fiche_territoire() -> None:
         with st.spinner("Recherche en cours…"):
             fiches = rechercher_parlementaire(query)
     except Exception:
+        logger.exception("Échec rechercher_parlementaire(query=%r)", query)
         st.error("Service RNE/SIRENE indisponible, réessayez plus tard.")
         return
 
@@ -72,7 +78,7 @@ def page_fiche_territoire() -> None:
         return
 
     result_count(len(fiches), "résultat")
-    for fiche in fiches:
+    for i, fiche in enumerate(fiches):
         parl, terr = fiche["parlementaire"], fiche["territoire"]
         fiche_header(
             parl["nom"], parl["prenom"], parl["chambre"],
@@ -102,7 +108,7 @@ def page_fiche_territoire() -> None:
                 plot_bgcolor="rgba(0,0,0,0)",
                 yaxis=dict(autorange="reversed"),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"naf-chart-{i}")
         st.divider()
 
 
@@ -123,6 +129,7 @@ def page_textes() -> None:
         with st.spinner("Recherche en cours…"):
             results = rechercher_textes(query, categories=cats or None, annee_min=annee_min)
     except Exception:
+        logger.exception("Échec rechercher_textes(query=%r)", query)
         st.error("Service DOLE indisponible, réessayez plus tard.")
         return
 

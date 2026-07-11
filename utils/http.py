@@ -27,12 +27,25 @@ def get_with_retry(
     base_delay   : délai de base en secondes (multiplié par le numéro de tentative)
 
     Retourne la dernière Response, succès ou échec — l'appelant appelle raise_for_status().
+    Les erreurs réseau transitoires (timeout, connexion) déclenchent aussi un retry ;
+    la dernière exception est relevée si toutes les tentatives échouent.
     """
     last_resp: Response | None = None
+    last_exc: requests.exceptions.RequestException | None = None
+
     for attempt in range(max_attempts):
-        resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
+            time.sleep(base_delay * (attempt + 1))
+            continue
+
         last_resp = resp
         if resp.status_code not in retryable:
             return resp
         time.sleep(base_delay * (attempt + 1))
-    return last_resp  # type: ignore[return-value]
+
+    if last_resp is not None:
+        return last_resp
+    raise last_exc  # type: ignore[misc]

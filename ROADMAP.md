@@ -12,8 +12,35 @@ Pipeline de données opérationnel :
 | `services/fiche_territoire.py` | Croisement RNE × SIRENE | ✅ |
 | `utils/cache.py` | Cache fichier JSON 24 h | ✅ |
 | `utils/config.py` | Constantes centralisées | ✅ |
-| `utils/http.py` | Retry HTTP partagé | ✅ |
+| `utils/http.py` | Retry HTTP partagé (statuts + erreurs réseau) | ✅ |
 | `utils/data_cleaning.py` | Normalisation codes dept | ✅ |
+| `tests/` | Suite pytest (31 tests) — data_cleaning, échappement HTML, recherche, retry HTTP | ✅ |
+
+---
+
+## Refactor fullstack (2026-07-11)
+
+Audit du code existant (pas seulement l'UI) avec la checklist sécurité/fiabilité du
+`code-reviewer`, plus les principes transversaux (tests à tous les niveaux, observabilité,
+"aucune couche incomplète") de `fullstack-developer` — sans reprendre son stack
+Next.js/PostgreSQL/tRPC/IA-native, hors sujet pour ce projet Python/Streamlit sans IA.
+
+Corrections :
+- `services/api_rne.py` n'utilisait pas le helper de retry partagé (`get_with_retry`),
+  contrairement à `api_sirene.py`/`api_dole.py` → uniformisé
+- `utils/http.py` : `get_with_retry` ne gérait que les codes HTTP transitoires, pas les
+  erreurs réseau (timeout, connexion) → retry + exception relevée après épuisement
+- `app.py` : erreurs réseau désormais journalisées (`logging`) avant d'afficher un message
+  générique à l'utilisateur — invisibles auparavant dans les logs serveur
+- **Bug réel trouvé en testant après refactor** : `page_fiche_territoire` plantait
+  (`StreamlitDuplicateElementId`) dès qu'une recherche renvoyait plusieurs élus du même
+  département (graphiques NAF identiques → collision d'ID auto-généré). Corrigé avec une
+  `key` explicite par résultat.
+- `tests/` créé (pytest) : logique pure sans dépendance réseau (normalisation, échappement
+  HTML, filtrage de recherche, retry HTTP avec mocks) — `requirements-dev.txt` pour l'installer
+
+Auth (`streamlit-authenticator`) toujours pas câblée dans `app.py` — reste le principal
+point bloquant avant un déploiement Render réellement privé (cf. Phase 5).
 
 ---
 

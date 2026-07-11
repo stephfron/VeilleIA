@@ -2,11 +2,11 @@
 Répertoire National des Élus — sénateurs et députés.
 Source : API tabulaire data.gouv.fr (dataset 5c34c4d1634f4173183a64f1)
 """
-import requests
 import pandas as pd
 from utils.cache import load, save
 from utils.config import RNE_BASE_URL, RNE_PAGE_SIZE, RNE_RESOURCE_IDS
 from utils.data_cleaning import normalize_dept_column
+from utils.http import get_with_retry
 
 _COL = {
     "Code du département":                             "code_dept",
@@ -35,7 +35,7 @@ def _fetch_all(resource_id: str) -> list[dict]:
     records: list[dict] = []
 
     while next_url:
-        resp = requests.get(next_url, params=params, timeout=30)
+        resp = get_with_retry(next_url, params=params, retryable=(429, 500, 502, 503))
         resp.raise_for_status()
         data = resp.json()
         records.extend(data["data"])
