@@ -17,27 +17,34 @@ Pipeline de données opérationnel :
 
 ---
 
-## Phase 2 — Interface Streamlit (priorité immédiate)
+## Phase 2 — Interface Streamlit ✅ (squelette livré)
 
-### 2.1 `app.py` — Squelette et navigation
+### 2.1 `app.py` — Squelette et navigation ✅
 
-- Sidebar : filtre chambre (Sénat / AN / les deux), filtre département
-- Page **Accueil** : barre de recherche (nom ou département)
-- Page **Fiche territoire** : résultat de `rechercher_parlementaire()`
-- Page **Textes législatifs** : résultat de `rechercher_textes()`
+- Sidebar : navigation Accueil / Fiche territoire / Textes législatifs (`st.sidebar.radio`)
+- Page **Accueil** : hero + 3 cartes de raccourci
+- Page **Fiche territoire** : recherche → `rechercher_parlementaire()` → header sombre + stats + bar chart NAF
+- Page **Textes législatifs** : recherche → `rechercher_textes()` → grille de cards (3 colonnes)
 
-### 2.2 Composants UI à créer
+Reste à faire : filtre chambre (Sénat/AN), filtre catégorie DOLE plus riche, pagination résultats.
+
+### 2.2 Design system ✅ (basé sur le design Figma UIMM)
+
+Charte extraite du design Figma de référence (rouge `#E63C46`, navy `#171A1F`, fond `#F2F7FA`,
+badges bleu-gris) et adaptée en composants Streamlit réutilisables :
 
 | Fichier | Contenu |
 |---|---|
-| `ui/carte_parlementaire.py` | Carte info élu (nom, chambre, dept, mandat) |
-| `ui/bloc_industrie.py` | Métriques + graphique Plotly (NAF, effectifs) |
-| `ui/tableau_textes.py` | Tableau DOLE filtrable (catégorie, année, mots-clés) |
+| `ui/theme.py` | Tokens couleurs + police (Inter, Google Fonts) |
+| `ui/style.py` | `inject_css()` — reskin boutons/inputs Streamlit + classes `.uimm-*` |
+| `ui/components.py` | `eyebrow()`, `stat_card()`, `texte_card()`, `fiche_header()` |
 
-### 2.3 Graphiques Plotly prévus
+Vérifié en local (Playwright + vraies données RNE/SIRENE/DOLE) : rendu conforme sur les 3 pages.
 
-- Treemap ou bar chart des codes NAF par effectifs estimés
-- Évolution temporelle des textes législatifs par secteur (création_date)
+### 2.3 Graphiques Plotly
+
+- ✅ Bar chart top 5 codes NAF par nb d'établissements (page Fiche territoire)
+- À faire : évolution temporelle des textes législatifs par secteur (création_date)
 
 ---
 
@@ -89,15 +96,18 @@ Livrable : `services/scoring.py`
 
 ## Phase 5 — Déploiement
 
-| Option | Coût | Contraintes |
-|---|---|---|
-| Streamlit Community Cloud | Gratuit | Repo public, 1 Go RAM |
-| HuggingFace Spaces | Gratuit | Docker, clé API en secret |
-| Scaleway / Render | ~5 €/mois | Plus flexible |
+**Décision : Render** (tier gratuit, `render.yaml` déjà en place à la racine).
 
-Recommandation : **HuggingFace Spaces** (Dockerfile) — cohérent avec la source DOLE, gestion des secrets intégrée, RAM suffisante.
+App privée (usage personnel) → authentification requise avant l'UI. Prévu pour Phase 2 :
 
-Prérequis : externaliser la clé INSEE SIRENE en variable d'environnement Spaces.
+- `streamlit-authenticator` (déjà dans `requirements.txt`) pour un login/mot de passe en tête d'`app.py`
+- Credentials via variables d'environnement Render (déjà déclarées dans `render.yaml`, `sync: false` → à saisir dans le dashboard Render) :
+  - `AUTH_USERNAME`
+  - `AUTH_PASSWORD_HASH` (hash bcrypt, généré via `streamlit_authenticator.Hasher`)
+  - `AUTH_COOKIE_KEY` (clé aléatoire pour signer le cookie de session)
+  - `INSEE_SIRENE_API_KEY` (déjà utilisée en local via `.env`)
+
+Le tier gratuit Render met l'instance en veille après inactivité (cold start ~30-50s au réveil) — acceptable pour un usage personnel.
 
 ---
 

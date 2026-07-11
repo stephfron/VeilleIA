@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: veilleia
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: INSEE_SIRENE_API_KEY
+        sync: false
+      - key: AUTH_USERNAME
+        sync: false
+      - key: AUTH_PASSWORD_HASH
+        sync: false
+      - key: AUTH_COOKIE_KEY
+        sync: false
