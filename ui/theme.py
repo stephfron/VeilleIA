@@ -24,3 +24,17 @@ FONT_IMPORT_URL = (
     "?family=Inter:wght@400;500;600;700;800&display=swap"
 )
 FONT_FAMILY = "'Inter', sans-serif"
+
+# Grille d'espacement 8pt — utilisée dans ui/style.py pour garder les marges/paddings cohérents
+SPACE: dict[str, str] = {
+    "xs": "0.5rem",   # 8px
+    "sm": "0.75rem",  # 12px
+    "md": "1rem",     # 16px
+    "lg": "1.5rem",   # 24px
+    "xl": "2rem",     # 32px
+}
+
+SHADOW: dict[str, str] = {
+    "card": "0 1px 2px rgba(23,26,31,0.04)",
+    "raised": "0 4px 12px rgba(23,26,31,0.08)",
+}

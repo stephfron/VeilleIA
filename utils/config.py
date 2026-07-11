@@ -85,7 +85,15 @@ DOLE_PAGE_DELAY: float = 0.5     # Délai entre pages HF
 
 # ---------------------------------------------------------------------------
 # Authentification — streamlit-authenticator
+# Fail-closed : activée par défaut sur tout déploiement qui ne définit pas la
+# variable (Render, Streamlit Community Cloud, ou autre) ; à désactiver
+# explicitement (AUTH_ENABLED=false) uniquement sur un environnement de test,
+# via son propre .env / secrets.toml — jamais un défaut du dépôt.
 # ---------------------------------------------------------------------------
+_AUTH_ENABLED_RAW = _get_secret("AUTH_ENABLED", "true").strip().lower()
+if _AUTH_ENABLED_RAW not in ("true", "false"):
+    raise ValueError(f"AUTH_ENABLED doit valoir 'true' ou 'false', valeur reçue : {_AUTH_ENABLED_RAW!r}")
+AUTH_ENABLED: bool = _AUTH_ENABLED_RAW == "true"
 AUTH_USERNAME: str = _get_secret("AUTH_USERNAME")
 AUTH_PASSWORD_HASH: str = _get_secret("AUTH_PASSWORD_HASH")
 AUTH_COOKIE_KEY: str = _get_secret("AUTH_COOKIE_KEY")
