@@ -34,7 +34,7 @@ APIs publiques
 
         ↓  utils/           (nettoyage, harmonisation)
 
-    app.py                  → Streamlit UI + Plotly
+    streamlit_app.py        → Streamlit UI + Plotly
 ```
 
 **Clé de jointure : Code Département** (harmonisé dans `utils/data_cleaning.py`).
@@ -57,7 +57,7 @@ VeilleIA/
 ├── utils/
 │   ├── data_cleaning.py    # Harmonisation codes département
 │   └── cache.py            # Cache fichier (évite les appels répétés)
-├── app.py                  # Point d'entrée Streamlit
+├── streamlit_app.py        # Point d'entrée Streamlit
 ├── requirements.txt
 └── readme.md
 ```
@@ -68,7 +68,7 @@ VeilleIA/
 
 - **Type hints** sur toutes les fonctions publiques
 - **Cache fichier** systématique sur les appels API (`data/raw/`) — zéro appel réseau superflu
-- `app.py` = UI uniquement, aucune logique métier
+- `streamlit_app.py` = UI uniquement, aucune logique métier
 - `services/` = fetch + retour `pd.DataFrame` propre, rien d'autre
 - Gestion d'erreur réseau via `try/except` + `st.error()` dans l'UI
 
@@ -91,4 +91,4 @@ VeilleIA/
 3. `services/api_rne.py` → DataFrame élus
 4. `services/api_sirene.py` → DataFrame entreprises
 5. `services/api_dole.py` → DataFrame activité législative
-6. `app.py` → UI Streamlit avec filtres département + graphiques Plotly
+6. `streamlit_app.py` → UI Streamlit avec filtres département + graphiques Plotly

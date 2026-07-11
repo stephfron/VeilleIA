@@ -1,0 +1,99 @@
+"""
+Configuration centrale — toutes les constantes et variables d'environnement.
+Importer depuis ici, jamais directement depuis os.getenv dans les services.
+"""
+import os
+from pathlib import Path
+
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
+
+def _get_secret(key: str, default: str = "") -> str:
+    """
+    Lit une variable de config, en tentant d'abord les variables d'environnement
+    (Render) puis st.secrets (Streamlit Community Cloud), qui n'expose pas
+    toujours ses secrets en variables d'environnement classiques.
+    """
+    val = os.getenv(key)
+    if val:
+        return val
+    if st is not None:
+        try:
+            return str(st.secrets.get(key, default))
+        except Exception:
+            return default
+    return default
+
+# ---------------------------------------------------------------------------
+# Répertoires
+# ---------------------------------------------------------------------------
+ROOT_DIR = Path(__file__).parent.parent
+DATA_RAW_DIR = ROOT_DIR / "data" / "raw"
+DATA_PROCESSED_DIR = ROOT_DIR / "data" / "processed"
+
+# ---------------------------------------------------------------------------
+# Cache
+# ---------------------------------------------------------------------------
+CACHE_TTL: int = 86_400          # 24 h en secondes
+
+# ---------------------------------------------------------------------------
+# RNE — API tabulaire data.gouv.fr
+# ---------------------------------------------------------------------------
+RNE_BASE_URL: str = "https://tabular-api.data.gouv.fr/api/resources/{}/data/"
+RNE_PAGE_SIZE: int = 100
+RNE_RESOURCE_IDS: dict[str, str] = {
+    "senateurs": "b78f8945-509f-4609-a4a7-3048b8370479",
+    "deputes":   "1ac42ff4-1336-44f8-a221-832039dbc142",
+}
+
+# ---------------------------------------------------------------------------
+# INSEE SIRENE — api.insee.fr
+# ---------------------------------------------------------------------------
+SIRENE_BASE_URL: str = "https://api.insee.fr/api-sirene/3.11/siret"
+SIRENE_API_KEY: str = _get_secret("INSEE_SIRENE_API_KEY")
+SIRENE_PAGE_SIZE: int = 1_000
+SIRENE_MAX_OFFSET: int = 9_000   # L'API bloque au-delà de 10 000 résultats / requête
+SIRENE_DELAY: float = 1.0        # Délai entre pages (évite le rate-limit)
+SIRENE_RETRY_DELAY: float = 10.0 # Attente après un 429
+
+# Sections NAF industrie (B + C) — préfixes utilisés pour les requêtes Lucene
+SIRENE_NAF_PREFIXES: list[str] = [
+    "05", "06", "07", "08", "09",   # Section B — Industries extractives
+    "1", "2",                        # Section C 10–29 (deux appels larges)
+    "30", "31", "32", "33",          # Section C 30–33
+]
+
+# Midpoints salariés par tranche INSEE (estimation)
+SIRENE_TRANCHE_MIDPOINT: dict[str, int] = {
+    "NN": 0,  "00": 0,  "01": 1,  "02": 4,   "03": 7,
+    "11": 14, "12": 34, "21": 74, "22": 149,
+    "31": 224, "32": 374, "41": 749, "42": 1_499,
+    "51": 3_499, "52": 7_499, "53": 15_000,
+}
+
+# ---------------------------------------------------------------------------
+# DOLE — HuggingFace datasets-server (AgentPublic/dole)
+# ---------------------------------------------------------------------------
+DOLE_HF_URL: str = "https://datasets-server.huggingface.co/rows"
+DOLE_HF_DATASET: str = "AgentPublic/dole"
+DOLE_HF_CONFIG: str = "latest"
+DOLE_PAGE_SIZE: int = 100
+DOLE_PAGE_DELAY: float = 0.5     # Délai entre pages HF
+
+# ---------------------------------------------------------------------------
+# Authentification — streamlit-authenticator
+# Fail-closed : activée par défaut sur tout déploiement qui ne définit pas la
+# variable (Render, Streamlit Community Cloud, ou autre) ; à désactiver
+# explicitement (AUTH_ENABLED=false) uniquement sur un environnement de test,
+# via son propre .env / secrets.toml — jamais un défaut du dépôt.
+# ---------------------------------------------------------------------------
+_AUTH_ENABLED_RAW = _get_secret("AUTH_ENABLED", "true").strip().lower()
+if _AUTH_ENABLED_RAW not in ("true", "false"):
+    raise ValueError(f"AUTH_ENABLED doit valoir 'true' ou 'false', valeur reçue : {_AUTH_ENABLED_RAW!r}")
+AUTH_ENABLED: bool = _AUTH_ENABLED_RAW == "true"
+AUTH_USERNAME: str = _get_secret("AUTH_USERNAME")
+AUTH_PASSWORD_HASH: str = _get_secret("AUTH_PASSWORD_HASH")
+AUTH_COOKIE_KEY: str = _get_secret("AUTH_COOKIE_KEY")

@@ -9,3 +9,6 @@ __pycache__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Claude Code (config locale)
+.claude/settings.local.json
