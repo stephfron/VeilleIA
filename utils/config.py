@@ -12,9 +12,13 @@ def _get_secret(key: str, default: str = "") -> str:
 
 # ---------------------------------------------------------------------------
 # Répertoires
+# Sur Vercel (env VERCEL=1) le filesystem est en lecture seule sauf /tmp :
+# le cache y est éphémère (perdu à chaque cold start) mais fonctionnel.
+# Surchargeable via DATA_RAW_DIR dans tous les environnements.
 # ---------------------------------------------------------------------------
 ROOT_DIR = Path(__file__).parent.parent
-DATA_RAW_DIR = ROOT_DIR / "data" / "raw"
+_DEFAULT_RAW = Path("/tmp/veilleia/raw") if os.getenv("VERCEL") else ROOT_DIR / "data" / "raw"
+DATA_RAW_DIR = Path(_get_secret("DATA_RAW_DIR", str(_DEFAULT_RAW)))
 DATA_PROCESSED_DIR = ROOT_DIR / "data" / "processed"
 
 # ---------------------------------------------------------------------------

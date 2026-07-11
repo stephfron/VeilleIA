@@ -5,8 +5,10 @@ Expose la couche services (RNE × SIRENE, DOLE) au frontend React.
 Aucune logique métier ici : validation des paramètres, appel du service,
 sérialisation JSON-safe, c'est tout.
 
-Dev   : uvicorn api.main:app --reload --port 8000  (+ Vite sur 5173, proxy /api)
-Prod  : le build React (frontend/dist) est servi statiquement par cette app.
+Dev    : uvicorn backend.app:app --reload --port 8000  (+ Vite sur 5173, proxy /api)
+Vercel : exposée via la fonction serverless api/index.py (voir vercel.json) ;
+         le front est servi par le CDN Vercel, pas par cette app.
+Render : le build React (frontend/dist) est servi statiquement par cette app.
 """
 from dotenv import load_dotenv
 

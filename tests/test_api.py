@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from api import main
+from backend import app as main
 
 
 @pytest.fixture()

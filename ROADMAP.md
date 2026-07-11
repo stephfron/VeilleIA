@@ -20,7 +20,14 @@ données** (services/, utils/, cache, tests) qui reste la source unique de logiq
   React Router, responsive (sidebar → barre horizontale sur mobile)
 - Graphiques Recharts mono-série, couleur de barre validée (contraste ≥ 3:1), tooltip au survol
 - `tests/test_api.py` : 10 tests FastAPI (TestClient, services mockés — aucun réseau)
-- `render.yaml` : build front (npm ci + vite build) puis `uvicorn api.main:app`
+- `render.yaml` : build front (npm ci + vite build) puis `uvicorn backend.app:app`
+
+**Déploiement Vercel (2026-07-11, prototype privé)** — `vercel.json` : front statique
+(CDN) + une fonction serverless Python (`api/index.py` → `backend/app.py`, maxDuration
+300 s), rewrites `/api/*` → fonction, SPA fallback. Cache fichier redirigé vers `/tmp`
+sur Vercel (`utils/config.py`, env `VERCEL`), éphémère entre cold starts. Confidentialité
+via Deployment Protection (Vercel Authentication, « All Deployments ») à activer dans le
+dashboard + variable `INSEE_SIRENE_API_KEY`. Détails et limites : readme §5.
 
 ---
 
