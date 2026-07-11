@@ -12,6 +12,11 @@ def eyebrow(label: str) -> None:
     st.markdown(f'<div class="uimm-eyebrow">/ {_esc(label)} /</div>', unsafe_allow_html=True)
 
 
+def result_count(n: int, singulier: str, pluriel: str | None = None) -> None:
+    mot = singulier if n <= 1 else (pluriel or f"{singulier}s")
+    st.markdown(f'<div class="uimm-result-count">{n} {mot}</div>', unsafe_allow_html=True)
+
+
 def _badge_html(text: str, light: bool = False) -> str:
     cls = "uimm-badge uimm-badge--light" if light else "uimm-badge"
     return f'<span class="{cls}">{_esc(text)}</span>'

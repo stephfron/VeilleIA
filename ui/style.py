@@ -101,12 +101,23 @@ def inject_css() -> None:
             color: #fff !important;
         }}
         .stButton > button[kind="primary"]:hover {{
-            background: {COLORS['red_dark']} !important;
+            background: {COLORS['red_hover']} !important;
         }}
         .stButton > button[kind="secondary"] {{
             background: transparent !important;
             color: {COLORS['navy']} !important;
             border: 1.5px solid {COLORS['navy']} !important;
+        }}
+        .stButton > button:focus-visible, .stLinkButton > a:focus-visible {{
+            outline: 2px solid {COLORS['navy']} !important;
+            outline-offset: 2px !important;
+        }}
+
+        /* --- résumé de résultats --- */
+        .uimm-result-count {{
+            color: {COLORS['muted']};
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
         }}
         </style>
         """,

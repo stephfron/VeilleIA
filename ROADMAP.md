@@ -25,8 +25,11 @@ Pipeline de données opérationnel :
 - Page **Accueil** : hero + 3 cartes de raccourci
 - Page **Fiche territoire** : recherche → `rechercher_parlementaire()` → header sombre + stats + bar chart NAF
 - Page **Textes législatifs** : recherche → `rechercher_textes()` → grille de cards (3 colonnes)
+- Filtre chambre (Sénat / Assemblée nationale / Les deux) sur la page Fiche territoire ✅
+- Filtre année minimale sur la page Textes législatifs ✅
+- Compteur de résultats (`result_count()`) sur les deux pages de recherche ✅
 
-Reste à faire : filtre chambre (Sénat/AN), filtre catégorie DOLE plus riche, pagination résultats.
+Reste à faire : pagination résultats (au-delà des ~20 premiers), filtre département dédié.
 
 ### 2.2 Design system ✅ (basé sur le design Figma UIMM)
 
@@ -41,10 +44,16 @@ badges bleu-gris) et adaptée en composants Streamlit réutilisables :
 
 Vérifié en local (Playwright + vraies données RNE/SIRENE/DOLE) : rendu conforme sur les 3 pages.
 
+Palette ajustée pour conformité WCAG 2.2 AA (contraste texte ≥ 4.5:1) : rouge boutons/stats
+`#C6303A` (5.4:1, remplace `#E63C46` qui était à 4.1:1), badges `#3D5F82` (6.6:1, remplace
+`#5B86B1` à 3.8:1), texte secondaire `#565F6E` (5.9-6.4:1). Le rouge vif d'origine (`red_bright`)
+reste utilisé pour les éléments non-textuels (barres de graphique Plotly). Focus visible ajouté
+sur les boutons (`:focus-visible`, critère WCAG 2.4.11).
+
 ### 2.3 Graphiques Plotly
 
 - ✅ Bar chart top 5 codes NAF par nb d'établissements (page Fiche territoire)
-- À faire : évolution temporelle des textes législatifs par secteur (création_date)
+- ✅ Évolution du nombre de textes législatifs par année (page Textes législatifs, sur les résultats filtrés)
 
 ---
 
