@@ -39,8 +39,7 @@ Corrections :
 - `tests/` créé (pytest) : logique pure sans dépendance réseau (normalisation, échappement
   HTML, filtrage de recherche, retry HTTP avec mocks) — `requirements-dev.txt` pour l'installer
 
-Auth (`streamlit-authenticator`) toujours pas câblée dans `app.py` — reste le principal
-point bloquant avant un déploiement Render réellement privé (cf. Phase 5).
+Auth (`streamlit-authenticator`) câblée le 2026-07-11 — voir Phase 5, le blocage est levé.
 
 ---
 
@@ -130,20 +129,30 @@ Livrable : `services/scoring.py`
 
 ---
 
-## Phase 5 — Déploiement
+## Phase 5 — Déploiement ✅ (prêt à déployer)
 
-**Décision : Render** (tier gratuit, `render.yaml` déjà en place à la racine).
+**Décision : Render** (tier gratuit, `render.yaml` en place à la racine, `runtime.txt` pin Python 3.11).
 
-App privée (usage personnel) → authentification requise avant l'UI. Prévu pour Phase 2 :
+App privée (usage personnel) → authentification requise avant l'UI, câblée le 2026-07-11 :
 
-- `streamlit-authenticator` (déjà dans `requirements.txt`) pour un login/mot de passe en tête d'`app.py`
-- Credentials via variables d'environnement Render (déjà déclarées dans `render.yaml`, `sync: false` → à saisir dans le dashboard Render) :
+- `utils/auth.py` (`require_login()`) : gate toute l'app avec `streamlit-authenticator`, appelé en tête d'`app.py`
+- Credentials via variables d'environnement (déjà déclarées dans `render.yaml`, `sync: false` → à saisir dans le dashboard Render, déjà dans `.env` local) :
   - `AUTH_USERNAME`
-  - `AUTH_PASSWORD_HASH` (hash bcrypt, généré via `streamlit_authenticator.Hasher`)
-  - `AUTH_COOKIE_KEY` (clé aléatoire pour signer le cookie de session)
-  - `INSEE_SIRENE_API_KEY` (déjà utilisée en local via `.env`)
+  - `AUTH_PASSWORD_HASH` (hash bcrypt — jamais le mot de passe en clair)
+  - `AUTH_COOKIE_KEY` (clé de signature du cookie de session)
+  - `INSEE_SIRENE_API_KEY`
+
+Testé en local (Playwright) : accès bloqué sans identifiants, rejeté avec un mauvais mot de
+passe, accordé avec les bons + déconnexion fonctionnelle.
 
 Le tier gratuit Render met l'instance en veille après inactivité (cold start ~30-50s au réveil) — acceptable pour un usage personnel.
+
+**Reste à faire pour déployer réellement** (action manuelle sur render.com, hors du dépôt) :
+
+1. New → Blueprint sur render.com, connecter le repo GitHub `VeilleIA`, branche `devapp`
+2. Renseigner les 4 variables d'environnement listées ci-dessus dans le dashboard Render
+   (valeurs identiques à celles du `.env` local pour AUTH_*)
+3. Déployer — l'URL Render n'est accessible qu'après connexion (login/mot de passe)
 
 ---
 
