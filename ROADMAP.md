@@ -34,6 +34,26 @@ données** (services/, utils/, cache, tests) qui reste la source unique de logiq
    Reste vrai : la première fiche d'un département est lente, les suivantes instantanées.
 Tri des textes DOLE par date décroissante (les lois récentes d'abord).
 
+**Fonctionnalités lobbying (2026-07-11)** — quatre livraisons :
+1. *Top employeurs nommés* : `resume_industrie_dept()` retourne les 10 plus gros
+   établissements (nom, commune, NAF, effectifs) — tableau dans la fiche territoire.
+2. *Recherche par pertinence* : `services/pertinence.py`, TF-IDF Python pur (stdlib,
+   sans sklearn — taille du bundle serverless), insensible aux accents, expansion par
+   préfixe, tri par score. Remplace le AND strict de la recherche DOLE.
+3. *Activité législative* : `services/api_activite.py` — synthèses Regards Citoyens
+   (nosdeputes.fr / nossenateurs.fr), groupe politique + amendements + questions +
+   présence, chargée à la demande dans la fiche (bouton). Best-effort assumé :
+   NosSénateurs est HS et la synthèse Députés est en retard sur les élus 2024
+   (réélus OK) — l'UI affiche « élu non référencé » proprement.
+4. *Socle IA (2e temps)* : `services/dossier.py` — `constituer_dossier()` agrège
+   élu + territoire + activité + textes pertinents en un dict JSON-safe exposé sur
+   `/api/dossier` avec `synthese_status: "non_implementee"`. La future fonction IA
+   (génération de synthèses pour préparer les rendez-vous, via API Claude)
+   n'aura qu'à implémenter `generer_synthese(dossier)`.
+Corrections au passage : filtre chambre appliqué avant la limite de fiches (les
+sénateurs vidaient le quota AN), résolution ciblée `fiche_par_identite()` (un seul
+fetch SIRENE pour le dossier, les homonymes ne coûtent plus rien).
+
 **Déploiement Vercel (2026-07-11, prototype privé)** — `vercel.json` : front statique
 (CDN) + une fonction serverless Python (`api/index.py` → `backend/app.py`, maxDuration
 300 s), rewrites `/api/*` → fonction, SPA fallback. Cache fichier redirigé vers `/tmp`

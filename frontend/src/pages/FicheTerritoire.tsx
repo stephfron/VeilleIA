@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchParlementaires } from "../api";
+import ActiviteLegislative from "../components/ActiviteLegislative";
+import TopEmployeurs from "../components/TopEmployeurs";
 import { TopNafChart } from "../components/charts";
 import { Alert, Eyebrow, FicheHeader, Loading, ResultCount, StatCard } from "../components/ui";
 import type { Fiche } from "../types";
@@ -94,6 +96,8 @@ export default function FicheTerritoire() {
                   <StatCard value={fmtEffectifs(terr.effectifs_estimes)} label="Effectifs estimés" />
                 </div>
                 {terr.top_naf.length > 0 && <TopNafChart data={terr.top_naf} />}
+                <TopEmployeurs employeurs={terr.top_employeurs ?? []} />
+                <ActiviteLegislative parlementaire={parl} />
                 <hr className="divider" />
               </article>
             );

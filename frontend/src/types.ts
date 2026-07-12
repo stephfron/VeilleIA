@@ -18,10 +18,32 @@ export interface Parlementaire {
   code_circo?: string | null;
 }
 
+export interface TopEmployeur {
+  nom: string;
+  commune: string | null;
+  naf: string | null;
+  effectifs_estimes: number;
+}
+
 export interface Territoire {
   nb_etablissements_industriels: number;
   effectifs_estimes: number;
   top_naf: TopNaf[];
+  top_employeurs: TopEmployeur[];
+}
+
+export interface Activite {
+  disponible: boolean;
+  groupe_sigle?: string | null;
+  amendements_proposes?: number | null;
+  amendements_signes?: number | null;
+  amendements_adoptes?: number | null;
+  questions_ecrites?: number | null;
+  questions_orales?: number | null;
+  rapports?: number | null;
+  interventions?: number | null;
+  semaines_presence?: number | null;
+  source_url?: string | null;
 }
 
 export interface Fiche {
@@ -42,6 +64,7 @@ export interface Texte {
   article_synthesis: string | null;
   chunk_text: string | null;
   doc_id: string;
+  score: number;
 }
 
 export interface TextesResponse {

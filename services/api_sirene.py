@@ -121,11 +121,15 @@ def get_industrie_dept(code_dept: str) -> pd.DataFrame:
 def resume_industrie_dept(code_dept: str) -> dict:
     """
     Résumé agrégé pour un département :
-      nb_etablissements, effectifs_estimes_total, top_naf (5 codes)
+      nb_etablissements, effectifs_estimes_total, top_naf (5 codes),
+      top_employeurs (10 plus gros établissements nommés)
     """
     df = get_industrie_dept(code_dept)
     if df.empty:
-        return {"nb_etablissements": 0, "effectifs_estimes_total": 0, "top_naf": []}
+        return {
+            "nb_etablissements": 0, "effectifs_estimes_total": 0,
+            "top_naf": [], "top_employeurs": [],
+        }
 
     top_naf = (
         df.groupby("naf")
@@ -136,8 +140,16 @@ def resume_industrie_dept(code_dept: str) -> dict:
         .to_dict("records")
     )
 
+    top_employeurs = (
+        df[df["nom"].notna() & (df["effectifs_estimes"] > 0)]
+        .sort_values("effectifs_estimes", ascending=False)
+        .head(10)[["nom", "commune", "naf", "effectifs_estimes"]]
+        .to_dict("records")
+    )
+
     return {
         "nb_etablissements":      len(df),
         "effectifs_estimes_total": int(df["effectifs_estimes"].sum()),
         "top_naf":                top_naf,
+        "top_employeurs":         top_employeurs,
     }

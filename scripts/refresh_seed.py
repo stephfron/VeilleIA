@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services import api_dole, api_rne  # noqa: E402
+from services import api_activite, api_dole, api_rne  # noqa: E402
 from utils.config import DATA_SEED_DIR, RNE_RESOURCE_IDS  # noqa: E402
 
 
@@ -34,6 +34,14 @@ def main() -> None:
     print("DOLE (long, ~1 min)…")
     dole = api_dole._fetch_all()
     _write("dole", dole.to_dict("records"))
+
+    print("Activité législative (Regards Citoyens, best-effort)…")
+    for chambre, (key_prefix, _) in api_activite._SOURCES.items():
+        records = api_activite._fetch_synthese(chambre)
+        if records is not None:
+            _write(f"activite_{key_prefix}", records)
+        else:
+            print(f"  activite_{key_prefix} — source indisponible, seed inchangé")
 
     print("Seed régénéré — penser à committer data/seed/.")
 

@@ -23,7 +23,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from services.api_activite import get_activite
 from services.api_dole import CATEGORY_LABEL, rechercher_textes
+from services.dossier import constituer_dossier
 from services.fiche_territoire import rechercher_parlementaire
 
 logging.basicConfig(level=logging.INFO)
@@ -67,26 +69,24 @@ def categories() -> dict[str, str]:
 
 @app.get("/api/parlementaires")
 def parlementaires(
-    q: str = Query(min_length=1, description="Nom, code ou libellé de département"),
+    q: str = Query(min_length=1, max_length=200, description="Nom, code ou libellé de département"),
     chambre: str | None = Query(default=None, description="Sénat ou Assemblée nationale"),
     limit: int = Query(default=20, ge=1, le=50, description="Nb max de fiches (borne les fetchs SIRENE)"),
 ) -> dict:
     if chambre is not None and chambre not in CHAMBRES:
         raise HTTPException(status_code=422, detail=f"chambre doit être l'une de : {sorted(CHAMBRES)}")
     try:
-        fiches = rechercher_parlementaire(q, limit=limit)
+        fiches = rechercher_parlementaire(q, limit=limit, chambre=chambre)
     except Exception:
         logger.exception("Échec rechercher_parlementaire(q=%r)", q)
         raise HTTPException(status_code=502, detail="Service RNE/SIRENE indisponible, réessayez plus tard.")
 
-    if chambre:
-        fiches = [f for f in fiches if f["parlementaire"]["chambre"] == chambre]
     return {"count": len(fiches), "results": _json_safe(fiches)}
 
 
 @app.get("/api/textes")
 def textes(
-    q: str = Query(min_length=1, description="Mots-clés (ET implicite)"),
+    q: str = Query(min_length=1, max_length=200, description="Mots-clés"),
     categories: list[str] | None = Query(default=None),
     annee_min: int | None = Query(default=None, ge=1990, le=2030),
 ) -> dict:
@@ -112,6 +112,46 @@ def textes(
         "results": _json_safe(records),
         "par_annee": {str(int(annee)): int(nb) for annee, nb in par_annee.items()},
     }
+
+
+@app.get("/api/activite")
+def activite(
+    nom: str = Query(min_length=1, max_length=100),
+    prenom: str = Query(min_length=1, max_length=100),
+    chambre: str = Query(description="Sénat ou Assemblée nationale"),
+) -> dict:
+    """Activité législative d'un élu (source Regards Citoyens, best-effort)."""
+    if chambre not in CHAMBRES:
+        raise HTTPException(status_code=422, detail=f"chambre doit être l'une de : {sorted(CHAMBRES)}")
+    try:
+        result = get_activite(nom, prenom, chambre)
+    except Exception:
+        # Contrat best-effort : jamais de 500, l'UI affiche « indisponible »
+        logger.exception("Échec get_activite(nom=%r, prenom=%r, chambre=%r)", nom, prenom, chambre)
+        result = None
+    if result is None:
+        return {"disponible": False}
+    return {"disponible": True, **_json_safe(result)}  # type: ignore[dict-item]
+
+
+@app.get("/api/dossier")
+def dossier(
+    nom: str = Query(min_length=1, max_length=100),
+    prenom: str = Query(min_length=1, max_length=100),
+    themes: str | None = Query(default=None, max_length=200, description="Mots-clés pour les textes pertinents"),
+) -> dict:
+    """
+    Dossier de synthèse complet d'un parlementaire — contexte destiné à la
+    future fonction IA de génération de synthèses (synthese_status le signale).
+    """
+    try:
+        result = constituer_dossier(nom, prenom, themes)
+    except Exception:
+        logger.exception("Échec constituer_dossier(nom=%r, prenom=%r)", nom, prenom)
+        raise HTTPException(status_code=502, detail="Sources de données indisponibles, réessayez plus tard.")
+    if result is None:
+        raise HTTPException(status_code=404, detail="Parlementaire introuvable.")
+    return _json_safe(result)  # type: ignore[return-value]
 
 
 # --- Front React buildé (prod) — monté en dernier pour ne pas masquer /api/* ---

@@ -8,18 +8,26 @@ Usage :
     fiches = rechercher_parlementaire("69")          # par code département
     fiches = rechercher_parlementaire("Rhône")       # par libellé département
 """
+import logging
+import re
+
 import pandas as pd
 from services.api_rne import get_parlementaires
 from services.api_sirene import resume_industrie_dept
+from services.pertinence import _fold
 from utils.data_cleaning import fmt_date
 
+logger = logging.getLogger("veilleia.fiche")
 
-def rechercher_parlementaire(query: str, limit: int = 20) -> list[dict]:
+
+def rechercher_parlementaire(query: str, limit: int = 20, chambre: str | None = None) -> list[dict]:
     """
     Recherche un parlementaire par nom, code département ou libellé département.
     Retourne une liste de fiches (homonymie possible → plusieurs résultats),
     plafonnée à `limit` : chaque fiche déclenche potentiellement un fetch
     SIRENE complet du département (~1-3 min hors cache), il faut borner.
+    Le filtre `chambre` s'applique AVANT la limite (sinon les sénateurs,
+    premiers dans le DataFrame, consomment tout le quota).
 
     Chaque fiche :
       parlementaire : nom, prénom, chambre, dept, circonscription, mandat, CSP
@@ -27,6 +35,8 @@ def rechercher_parlementaire(query: str, limit: int = 20) -> list[dict]:
     """
     df = get_parlementaires()
     matches = df[_mask(df, query.strip())]
+    if chambre is not None and "chambre" in matches.columns:
+        matches = matches[matches["chambre"] == chambre]
     if matches.empty:
         return []
 
@@ -38,6 +48,32 @@ def rechercher_parlementaire(query: str, limit: int = 20) -> list[dict]:
         if len(fiches) >= limit:
             break
     return fiches
+
+
+def _identite_key(prenom: str, nom: str) -> str:
+    """Clé de comparaison : accents/casse ignorés, tirets ≡ espaces."""
+    return re.sub(r"[-\s]+", " ", _fold(f"{prenom} {nom}")).strip()
+
+
+def fiche_par_identite(nom: str, prenom: str) -> dict | None:
+    """
+    Fiche d'un parlementaire précis, identifié par « prénom nom » exact
+    (accents, casse et tirets ignorés). Un seul fetch SIRENE — contrairement
+    à la recherche générale, les homonymes d'autres départements ne coûtent
+    rien. En cas d'homonymie parfaite, le premier élu est retourné et un
+    avertissement est journalisé.
+    """
+    df = get_parlementaires()
+    cible = _identite_key(prenom, nom)
+    matches = [
+        row for _, row in df.iterrows()
+        if _identite_key(str(row.get("prenom", "")), str(row.get("nom", ""))) == cible and _geo_key(row)
+    ]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        logger.warning("Homonymie parfaite pour %r : %d élus, premier retenu", cible, len(matches))
+    return _build_fiche(matches[0])
 
 
 # ---------------------------------------------------------------------------
@@ -95,5 +131,6 @@ def _build_fiche(row: pd.Series) -> dict:
             "nb_etablissements_industriels": industrie.get("nb_etablissements", 0),
             "effectifs_estimes":             industrie.get("effectifs_estimes_total", 0),
             "top_naf":                       industrie.get("top_naf", []),
+            "top_employeurs":                industrie.get("top_employeurs", []),
         },
     }

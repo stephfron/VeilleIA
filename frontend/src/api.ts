@@ -1,4 +1,4 @@
-import type { Categories, ParlementairesResponse, TextesResponse } from "./types";
+import type { Activite, Categories, ParlementairesResponse, TextesResponse } from "./types";
 
 /** Client HTTP minimal — même origine (proxy Vite en dev, FastAPI statique en prod). */
 
@@ -39,4 +39,8 @@ export function fetchTextes(
 
 export function fetchCategories(): Promise<Categories> {
   return get<Categories>("/api/categories", {});
+}
+
+export function fetchActivite(nom: string, prenom: string, chambre: string): Promise<Activite> {
+  return get<Activite>("/api/activite", { nom, prenom, chambre });
 }

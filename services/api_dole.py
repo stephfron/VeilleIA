@@ -7,6 +7,7 @@ Recherche par mots-clés sur titre + texte (ET implicite). Sans LLM, sans embedd
 """
 import time
 import pandas as pd
+from services.pertinence import IndexPertinence
 from utils.cache import load, memoize, save
 from utils.config import (
     DOLE_HF_URL, DOLE_HF_DATASET, DOLE_HF_CONFIG,
@@ -84,6 +85,14 @@ def get_dole() -> pd.DataFrame:
     return df
 
 
+@memoize()
+def _index_pertinence() -> IndexPertinence:
+    """Index TF-IDF sur titre + texte de chaque chunk (mémoïsé, ~1 s à construire)."""
+    df = get_dole()
+    corpus = (df["title"].fillna("") + " " + df["chunk_text"].fillna("")).tolist()
+    return IndexPertinence(corpus)
+
+
 def rechercher_textes(
     query: str,
     categories: list[str] | None = None,
@@ -91,7 +100,8 @@ def rechercher_textes(
     top_n: int = 20,
 ) -> pd.DataFrame:
     """
-    Recherche des textes législatifs par mots-clés (ET implicite entre les termes).
+    Recherche des textes législatifs par pertinence (TF-IDF, insensible aux
+    accents, expansion par préfixe) — plus de AND strict entre les termes.
 
     Paramètres
     ----------
@@ -103,9 +113,21 @@ def rechercher_textes(
     Retourne
     --------
     DataFrame : title, category_label, annee, article_title,
-                article_synthesis, chunk_text, doc_id
+                article_synthesis, chunk_text, doc_id, score (0-1, décroissant)
     """
+    if not query.strip():
+        return pd.DataFrame()
+
     df = get_dole()
+    scores = _index_pertinence().scores(query)
+    if len(scores) != len(df):  # corpus rafraîchi entre les deux mémos → resynchroniser
+        _index_pertinence.cache_clear()
+        df = get_dole()
+        scores = _index_pertinence().scores(query)
+        if len(scores) != len(df):  # course résiduelle : index jetable sur le df en main
+            corpus = (df["title"].fillna("") + " " + df["chunk_text"].fillna("")).tolist()
+            scores = IndexPertinence(corpus).scores(query)
+    df = df.assign(score=scores)
 
     if categories:
         df = df[df["category"].isin(categories)]
@@ -113,27 +135,21 @@ def rechercher_textes(
     if annee_min:
         df = df[df["creation_date"].dt.year >= annee_min]
 
-    mots = [m.strip() for m in query.lower().split() if m.strip()]
-    if not mots:
-        return pd.DataFrame()
-
-    corpus = df["title"].fillna("").str.lower() + " " + df["chunk_text"].fillna("").str.lower()
-    mask = pd.Series(True, index=df.index)
-    for mot in mots:
-        mask &= corpus.str.contains(mot, regex=False, na=False)
-
     results = (
-        df[mask]
-        .sort_values("chunk_index")
-        .drop_duplicates(subset="doc_id", keep="first")
-        .sort_values("creation_date", ascending=False)  # textes récents d'abord
+        df[df["score"] > 0]
+        .sort_values(["score", "chunk_index"], ascending=[False, True])
+        .drop_duplicates(subset="doc_id", keep="first")   # meilleur chunk de chaque dossier
         .head(top_n)
         .copy()
     )
+    if results.empty:
+        return pd.DataFrame()
 
     results["category_label"] = results["category"].map(CATEGORY_LABEL).fillna(results["category"])
     results["annee"] = results["creation_date"].dt.year.astype("Int64")
+    results["score"] = results["score"].round(4)
 
     return results[
-        ["title", "category_label", "annee", "article_title", "article_synthesis", "chunk_text", "doc_id"]
+        ["title", "category_label", "annee", "article_title", "article_synthesis",
+         "chunk_text", "doc_id", "score"]
     ].reset_index(drop=True)

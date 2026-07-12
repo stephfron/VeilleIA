@@ -1,6 +1,6 @@
 import pandas as pd
 
-from services.fiche_territoire import _geo_key, _mask, rechercher_parlementaire
+from services.fiche_territoire import _geo_key, _mask, fiche_par_identite, rechercher_parlementaire
 
 
 def _df():
@@ -71,6 +71,28 @@ def test_rechercher_parlementaire_builds_fiche(monkeypatch):
 def test_rechercher_parlementaire_no_match_returns_empty_list(monkeypatch):
     monkeypatch.setattr("services.fiche_territoire.get_parlementaires", lambda: _df())
     assert rechercher_parlementaire("introuvable") == []
+
+
+def test_fiche_par_identite_exact_insensible_accents(monkeypatch):
+    monkeypatch.setattr("services.fiche_territoire.get_parlementaires", lambda: _df())
+    appels = []
+
+    def fake_resume(code_dept):
+        appels.append(code_dept)
+        return {"nb_etablissements": 1, "effectifs_estimes_total": 2, "top_naf": [], "top_employeurs": []}
+
+    monkeypatch.setattr("services.fiche_territoire.resume_industrie_dept", fake_resume)
+
+    fiche = fiche_par_identite("CURIE", "MARIE")  # casse différente du jeu de données
+
+    assert fiche is not None
+    assert fiche["parlementaire"]["nom"] == "Curie"
+    assert appels == ["971"]  # un seul fetch SIRENE, celui du bon élu
+
+
+def test_fiche_par_identite_introuvable(monkeypatch):
+    monkeypatch.setattr("services.fiche_territoire.get_parlementaires", lambda: _df())
+    assert fiche_par_identite("Dupont", "Paul") is None  # prénom ne matche pas
 
 
 def test_rechercher_parlementaire_respecte_limit(monkeypatch):

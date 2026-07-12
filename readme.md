@@ -22,13 +22,19 @@ VeilleIA est une application web de **veille territoriale et institutionnelle**.
 
 ```text
 APIs publiques
-  ├── RNE (data.gouv.fr)     → élus / mandats / circonscriptions
-  ├── SIRENE (INSEE)          → entreprises / codes NAF / départements
-  └── DOLE (HuggingFace)      → textes de loi / dossiers législatifs
+  ├── RNE (data.gouv.fr)        → élus en mandat / circonscriptions
+  ├── SIRENE (INSEE)             → établissements industriels / NAF / employeurs
+  ├── DOLE (HuggingFace)         → textes de loi (recherche par pertinence TF-IDF)
+  └── Regards Citoyens           → activité législative (amendements, questions, groupe)
 
-        ↓  services/*.py  (fetch + cache local 24 h, data/raw/)
+        ↓  services/*.py  (fetch + cache 24 h + seed committé data/seed/)
 
-        ↓  api/main.py  (FastAPI — /api/parlementaires, /api/textes)
+        ↓  backend/app.py  (FastAPI)
+             /api/parlementaires   fiches élu × territoire (limit, chambre)
+             /api/textes           textes triés par pertinence
+             /api/activite         activité législative d'un élu (best-effort)
+             /api/dossier          dossier complet — contexte de la future IA
+                                   de synthèse (synthese_status le signale)
 
     frontend/ (React + Vite)  → UI + Recharts
 ```
@@ -46,9 +52,12 @@ VeilleIA/
 ├── backend/
 │   └── app.py              # API FastAPI + service statique du build React
 ├── services/
-│   ├── api_rne.py          # Élus par département/mandat
-│   ├── api_sirene.py       # Entreprises par NAF/département
-│   ├── api_dole.py         # Textes de loi (recherche mots-clés)
+│   ├── api_rne.py          # Élus en mandat par département
+│   ├── api_sirene.py       # Établissements industriels + top employeurs
+│   ├── api_dole.py         # Textes de loi (pertinence TF-IDF)
+│   ├── api_activite.py     # Activité législative (Regards Citoyens)
+│   ├── pertinence.py       # Moteur TF-IDF (numpy pur, accents, préfixes)
+│   ├── dossier.py          # Dossier de synthèse — socle de la future IA
 │   └── fiche_territoire.py # Croisement RNE × SIRENE
 ├── utils/
 │   ├── config.py           # Constantes + variables d'env centralisées

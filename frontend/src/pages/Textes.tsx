@@ -127,7 +127,11 @@ export default function Textes() {
 
       {data !== null && data.count > 0 && !loading && (
         <>
-          <ResultCount n={data.count} singulier="texte trouvé" pluriel="textes trouvés" />
+          <ResultCount
+            n={data.count}
+            singulier="texte trouvé (trié par pertinence)"
+            pluriel="textes trouvés (triés par pertinence)"
+          />
           <TextesParAnneeChart parAnnee={data.par_annee} />
           <div className="grid-3">
             {data.results.map((t) => (

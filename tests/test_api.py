@@ -35,7 +35,7 @@ def test_categories(client):
 
 
 def test_parlementaires_nan_becomes_null(client, monkeypatch):
-    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q, limit=20: [FICHE])
+    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q, limit=20, chambre=None: [FICHE])
     body = client.get("/api/parlementaires", params={"q": "dupont"}).json()
     assert body["count"] == 1
     assert body["results"][0]["parlementaire"]["libelle_csp"] is None
@@ -44,7 +44,13 @@ def test_parlementaires_nan_becomes_null(client, monkeypatch):
 
 def test_parlementaires_filtre_chambre(client, monkeypatch):
     autre = {**FICHE, "parlementaire": {**FICHE["parlementaire"], "chambre": "Assemblée nationale"}}
-    monkeypatch.setattr(main, "rechercher_parlementaire", lambda q, limit=20: [FICHE, autre])
+    monkeypatch.setattr(
+        main, "rechercher_parlementaire",
+        lambda q, limit=20, chambre=None: [
+            f for f in [FICHE, autre]
+            if chambre is None or f["parlementaire"]["chambre"] == chambre
+        ],
+    )
     body = client.get("/api/parlementaires", params={"q": "dupont", "chambre": "Sénat"}).json()
     assert body["count"] == 1
     assert body["results"][0]["parlementaire"]["chambre"] == "Sénat"
@@ -60,7 +66,7 @@ def test_parlementaires_query_vide(client):
 
 
 def test_parlementaires_service_down(client, monkeypatch):
-    def boom(q, limit=20):
+    def boom(q, limit=20, chambre=None):
         raise RuntimeError("réseau KO")
     monkeypatch.setattr(main, "rechercher_parlementaire", boom)
     resp = client.get("/api/parlementaires", params={"q": "dupont"})
@@ -90,3 +96,39 @@ def test_textes_vide(client, monkeypatch):
 def test_textes_categorie_inconnue(client):
     resp = client.get("/api/textes", params={"q": "x", "categories": ["FAKE_CAT"]})
     assert resp.status_code == 422
+
+
+def test_activite_disponible(client, monkeypatch):
+    monkeypatch.setattr(main, "get_activite",
+                        lambda nom, prenom, chambre: {"groupe_sigle": "GRP", "amendements_proposes": 5})
+    body = client.get("/api/activite",
+                      params={"nom": "Dupont", "prenom": "Jean", "chambre": "Sénat"}).json()
+    assert body["disponible"] is True
+    assert body["groupe_sigle"] == "GRP"
+
+
+def test_activite_indisponible(client, monkeypatch):
+    monkeypatch.setattr(main, "get_activite", lambda nom, prenom, chambre: None)
+    body = client.get("/api/activite",
+                      params={"nom": "X", "prenom": "Y", "chambre": "Sénat"}).json()
+    assert body == {"disponible": False}
+
+
+def test_activite_chambre_invalide(client):
+    resp = client.get("/api/activite", params={"nom": "X", "prenom": "Y", "chambre": "Congrès"})
+    assert resp.status_code == 422
+
+
+def test_dossier_ok(client, monkeypatch):
+    monkeypatch.setattr(main, "constituer_dossier",
+                        lambda nom, prenom, themes: {"parlementaire": {"nom": nom},
+                                                     "synthese": None,
+                                                     "synthese_status": "non_implementee"})
+    body = client.get("/api/dossier", params={"nom": "Dupont", "prenom": "Jean"}).json()
+    assert body["synthese_status"] == "non_implementee"
+
+
+def test_dossier_introuvable(client, monkeypatch):
+    monkeypatch.setattr(main, "constituer_dossier", lambda nom, prenom, themes: None)
+    resp = client.get("/api/dossier", params={"nom": "X", "prenom": "Y"})
+    assert resp.status_code == 404
