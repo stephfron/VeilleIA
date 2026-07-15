@@ -3,6 +3,7 @@ import type {
   Categories,
   CiblesResponse,
   Dossier,
+  FormationsResponse,
   InteractionInput,
   InteractionsResponse,
   ParlementairesResponse,
@@ -54,6 +55,10 @@ export function fetchCategories(): Promise<Categories> {
 
 export function fetchActivite(nom: string, prenom: string, chambre: string): Promise<Activite> {
   return get<Activite>("/api/activite", { nom, prenom, chambre });
+}
+
+export function fetchFormations(codeDept: string): Promise<FormationsResponse> {
+  return get<FormationsResponse>("/api/formations", { code_dept: codeDept });
 }
 
 /** Requêtes mutantes (POST/PUT/DELETE) — corps JSON, erreurs via `detail`. */
