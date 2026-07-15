@@ -70,6 +70,17 @@ SIRENE_TRANCHE_MIDPOINT: dict[str, int] = {
 }
 
 # ---------------------------------------------------------------------------
+# CRM — suivi des relations parlementaires (services/crm.py)
+# DATABASE_URL défini  → PostgreSQL (Supabase) via psycopg, persistant.
+#   Requis sur Vercel : le filesystem serverless est éphémère. Utiliser la
+#   connection string du Transaction pooler Supabase (port 6543).
+# DATABASE_URL absent  → SQLite dans CRM_DB_PATH (dev / tests, zéro config).
+# ---------------------------------------------------------------------------
+DATABASE_URL: str = _get_secret("DATABASE_URL")
+_DEFAULT_CRM = Path("/tmp/veilleia/crm.sqlite") if os.getenv("VERCEL") else ROOT_DIR / "data" / "crm.sqlite"
+CRM_DB_PATH = Path(_get_secret("CRM_DB_PATH", str(_DEFAULT_CRM)))
+
+# ---------------------------------------------------------------------------
 # DOLE — HuggingFace datasets-server (AgentPublic/dole)
 # ---------------------------------------------------------------------------
 DOLE_HF_URL: str = "https://datasets-server.huggingface.co/rows"

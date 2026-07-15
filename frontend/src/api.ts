@@ -1,4 +1,15 @@
-import type { Activite, Categories, ParlementairesResponse, TextesResponse } from "./types";
+import type {
+  Activite,
+  Categories,
+  CiblesResponse,
+  Dossier,
+  InteractionInput,
+  InteractionsResponse,
+  ParlementairesResponse,
+  RappelsResponse,
+  Statut,
+  TextesResponse,
+} from "./types";
 
 /** Client HTTP minimal — même origine (proxy Vite en dev, FastAPI statique en prod). */
 
@@ -43,4 +54,55 @@ export function fetchCategories(): Promise<Categories> {
 
 export function fetchActivite(nom: string, prenom: string, chambre: string): Promise<Activite> {
   return get<Activite>("/api/activite", { nom, prenom, chambre });
+}
+
+/** Requêtes mutantes (POST/PUT/DELETE) — corps JSON, erreurs via `detail`. */
+async function send<T>(method: "POST" | "PUT" | "DELETE", path: string, body?: object): Promise<T> {
+  const resp = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => null);
+    const detail = data?.detail;
+    throw new Error(typeof detail === "string" ? detail : `Erreur ${resp.status}`);
+  }
+  return resp.json() as Promise<T>;
+}
+
+export function fetchCibles(
+  q: string,
+  chambre?: string,
+  avecActivite?: boolean,
+): Promise<CiblesResponse> {
+  return get<CiblesResponse>("/api/cibles", {
+    q,
+    chambre,
+    avec_activite: avecActivite ? "true" : undefined,
+  });
+}
+
+export function fetchDossier(nom: string, prenom: string, themes?: string): Promise<Dossier> {
+  return get<Dossier>("/api/dossier", { nom, prenom, themes: themes || undefined });
+}
+
+export function fetchInteractions(nom: string, prenom: string): Promise<InteractionsResponse> {
+  return get<InteractionsResponse>("/api/interactions", { nom, prenom });
+}
+
+export function createInteraction(input: InteractionInput): Promise<{ id: number; elu_key: string }> {
+  return send("POST", "/api/interactions", input);
+}
+
+export function deleteInteraction(id: number): Promise<{ deleted: boolean }> {
+  return send("DELETE", `/api/interactions/${id}`);
+}
+
+export function setStatut(nom: string, prenom: string, statut: Statut): Promise<{ elu_key: string; statut: Statut }> {
+  return send("PUT", "/api/statut", { nom, prenom, statut });
+}
+
+export function fetchRappels(): Promise<RappelsResponse> {
+  return get<RappelsResponse>("/api/rappels", {});
 }
