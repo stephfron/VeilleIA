@@ -75,6 +75,20 @@ export interface TextesResponse {
 
 export type Categories = Record<string, string>;
 
+export interface Formation {
+  titre: string;
+  url_descriptif: string;
+  etablissement: string;
+  type: string;
+  localite: string;
+}
+
+export interface FormationsResponse {
+  count: number;
+  results: Formation[];
+  disponible: boolean;
+}
+
 /* ------------------------------------------------------------------ CRM */
 
 export type Statut = "a_contacter" | "contacte" | "allie" | "neutre" | "opposant";

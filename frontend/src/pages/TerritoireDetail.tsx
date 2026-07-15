@@ -1,11 +1,12 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { fetchParlementaires } from "../api";
+import { fetchParlementaires, fetchFormations } from "../api";
 import { Eyebrow, Loading, Alert, ResultCount, FicheHeader } from "../components/ui";
 import TopEmployeurs from "../components/TopEmployeurs";
 import { TopNafChart } from "../components/charts";
 import ActiviteLegislative from "../components/ActiviteLegislative";
-import type { Fiche } from "../types";
+import FormationCard from "../components/FormationCard";
+import type { Fiche, Formation } from "../types";
 
 /**
  * Page hub territorial — point d'entrée principal pour lobbyiste UIMM.
@@ -14,7 +15,9 @@ import type { Fiche } from "../types";
 export default function TerritoireDetail() {
   const { codeDept } = useParams<{ codeDept: string }>();
   const [fiches, setFiches] = useState<Fiche[]>([]);
+  const [formations, setFormations] = useState<Formation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingFormations, setLoadingFormations] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,6 +35,15 @@ export default function TerritoireDetail() {
         setFiches([]);
       })
       .finally(() => setLoading(false));
+  }, [codeDept]);
+
+  useEffect(() => {
+    if (!codeDept) return;
+    setLoadingFormations(true);
+    fetchFormations(codeDept)
+      .then((r) => setFormations(r.results))
+      .catch(() => setFormations([]))
+      .finally(() => setLoadingFormations(false));
   }, [codeDept]);
 
   if (!codeDept) {
@@ -55,7 +67,18 @@ export default function TerritoireDetail() {
           )}
           <TopEmployeurs employeurs={fiches[0].territoire.top_employeurs ?? []} />
 
-          {/* TODO: Phase 2 — Formations professionnelles ici */}
+          {loadingFormations && <Loading label="Chargement des formations…" />}
+          {formations.length > 0 && (
+            <>
+              <h3>Formations professionnelles</h3>
+              <ResultCount n={formations.length} singulier="formation" />
+              <div className="grid-3">
+                {formations.map((f, i) => (
+                  <FormationCard key={`${f.titre}-${i}`} formation={f} />
+                ))}
+              </div>
+            </>
+          )}
 
           <h3>Élus du département</h3>
           <ResultCount n={fiches.length} singulier="élu" />

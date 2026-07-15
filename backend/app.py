@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from services import crm
 from services.api_activite import get_activite
 from services.api_dole import CATEGORY_LABEL, rechercher_textes
+from services.api_onisep import get_formations
 from services.ciblage import cibles_departement
 from services.dossier import constituer_dossier
 from services.fiche_territoire import rechercher_parlementaire
@@ -173,6 +174,25 @@ def dossier(
     if result is None:
         raise HTTPException(status_code=404, detail="Parlementaire introuvable.")
     return _json_safe(result)  # type: ignore[return-value]
+
+
+@app.get("/api/formations")
+def formations(
+    code_dept: str = Query(min_length=2, max_length=3, description="Code département (ex : 69)"),
+) -> dict:
+    """
+    Formations professionnelles d'un département (API Onisep, best-effort).
+    Retourne [] si source indisponible.
+    """
+    try:
+        results = get_formations(code_dept)
+    except Exception:
+        logger.exception("Échec get_formations(code_dept=%r)", code_dept)
+        results = None
+    # Best-effort : jamais de 5xx, retourne [] si indisponible
+    if results is None:
+        return {"count": 0, "results": [], "disponible": False}
+    return {"count": len(results), "results": _json_safe(results), "disponible": True}
 
 
 # --- CRM lobbying : cibles, interactions, statuts, rappels ---
