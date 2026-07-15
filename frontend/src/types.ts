@@ -74,3 +74,100 @@ export interface TextesResponse {
 }
 
 export type Categories = Record<string, string>;
+
+/* ------------------------------------------------------------------ CRM */
+
+export type Statut = "a_contacter" | "contacte" | "allie" | "neutre" | "opposant";
+
+export type Canal = "rendez_vous" | "mail" | "courrier" | "appel" | "evenement" | "autre";
+
+export interface Interaction {
+  id: number;
+  elu_key: string;
+  date: string;
+  canal: Canal;
+  objet: string;
+  notes: string | null;
+  rappel: string | null;
+  cree_le: string;
+}
+
+export interface InteractionsResponse {
+  count: number;
+  statut: Statut;
+  results: Interaction[];
+}
+
+export interface InteractionInput {
+  nom: string;
+  prenom: string;
+  canal: Canal;
+  objet: string;
+  date_interaction?: string;
+  notes?: string;
+  rappel?: string;
+}
+
+/** Relance due : interaction jointe à la relation (nom/prénom/statut). */
+export interface Rappel {
+  id: number;
+  elu_key: string;
+  date: string;
+  canal: Canal;
+  objet: string;
+  notes: string | null;
+  rappel: string;
+  nom: string;
+  prenom: string;
+  statut: Statut;
+}
+
+export interface RappelsResponse {
+  count: number;
+  results: Rappel[];
+}
+
+/* -------------------------------------------------------------- ciblage */
+
+export interface DetailScore {
+  industrie: number;
+  activite: number;
+  fraicheur: number;
+  motif_fraicheur: string;
+}
+
+export interface Cible {
+  parlementaire: Parlementaire;
+  territoire: Territoire;
+  statut: Statut;
+  nb_interactions: number;
+  dernier_contact: string | null;
+  score: number;
+  detail_score: DetailScore;
+}
+
+export interface CiblesResponse {
+  count: number;
+  results: Cible[];
+}
+
+/* -------------------------------------------------------------- dossier */
+
+export interface TexteDossier {
+  title: string;
+  category_label: string;
+  annee: number | null;
+  article_synthesis: string | null;
+  score: number;
+}
+
+/** Miroir de /api/dossier — l'activité y est le record brut (sans `disponible`). */
+export interface Dossier {
+  parlementaire: Parlementaire;
+  territoire: Territoire;
+  activite_legislative: Omit<Activite, "disponible"> | null;
+  textes_pertinents: TexteDossier[];
+  themes: string;
+  synthese: string | null;
+  synthese_status: string;
+}

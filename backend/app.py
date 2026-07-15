@@ -22,9 +22,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
+from services import crm
 from services.api_activite import get_activite
 from services.api_dole import CATEGORY_LABEL, rechercher_textes
+from services.ciblage import cibles_departement
 from services.dossier import constituer_dossier
 from services.fiche_territoire import rechercher_parlementaire
 
@@ -38,11 +41,29 @@ app = FastAPI(title="VeilleIA API", version="1.0.0", docs_url="/api/docs", opena
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
 CHAMBRES = {"Sénat", "Assemblée nationale"}
+
+
+class InteractionIn(BaseModel):
+    """Corps de POST /api/interactions."""
+    nom: str = Field(min_length=1, max_length=100)
+    prenom: str = Field(min_length=1, max_length=100)
+    canal: str = Field(min_length=1, max_length=30)
+    objet: str = Field(min_length=1, max_length=300)
+    date_interaction: str | None = Field(default=None, max_length=10)
+    notes: str | None = Field(default=None, max_length=2000)
+    rappel: str | None = Field(default=None, max_length=10)
+
+
+class StatutIn(BaseModel):
+    """Corps de PUT /api/statut."""
+    nom: str = Field(min_length=1, max_length=100)
+    prenom: str = Field(min_length=1, max_length=100)
+    statut: str = Field(min_length=1, max_length=30)
 
 
 def _json_safe(value: object) -> object:
@@ -152,6 +173,92 @@ def dossier(
     if result is None:
         raise HTTPException(status_code=404, detail="Parlementaire introuvable.")
     return _json_safe(result)  # type: ignore[return-value]
+
+
+# --- CRM lobbying : cibles, interactions, statuts, rappels ---
+
+@app.get("/api/cibles")
+def cibles(
+    q: str = Query(min_length=1, max_length=200, description="Nom, code ou libellé de département"),
+    chambre: str | None = Query(default=None, description="Sénat ou Assemblée nationale"),
+    limit: int = Query(default=20, ge=1, le=50),
+    avec_activite: bool = Query(default=False, description="Pondérer par l'activité législative (plus lent)"),
+) -> dict:
+    """Liste priorisée des parlementaires à contacter (score /100 explicable)."""
+    if chambre is not None and chambre not in CHAMBRES:
+        raise HTTPException(status_code=422, detail=f"chambre doit être l'une de : {sorted(CHAMBRES)}")
+    try:
+        results = cibles_departement(q, chambre=chambre, limit=limit, avec_activite=avec_activite)
+    except Exception:
+        logger.exception("Échec cibles_departement(q=%r)", q)
+        raise HTTPException(status_code=502, detail="Sources de données indisponibles, réessayez plus tard.")
+    return {"count": len(results), "results": _json_safe(results)}
+
+
+@app.get("/api/interactions")
+def interactions(
+    nom: str = Query(min_length=1, max_length=100),
+    prenom: str = Query(min_length=1, max_length=100),
+) -> dict:
+    """Historique des interactions avec un élu + statut de la relation."""
+    try:
+        results = crm.get_interactions(nom, prenom)
+        statut = crm.get_statuts().get(crm.elu_key(nom, prenom), "a_contacter")
+    except Exception:
+        logger.exception("Échec get_interactions(nom=%r, prenom=%r)", nom, prenom)
+        raise HTTPException(status_code=502, detail="Base CRM indisponible, réessayez plus tard.")
+    return {"count": len(results), "statut": statut, "results": results}
+
+
+@app.post("/api/interactions", status_code=201)
+def creer_interaction(corps: InteractionIn) -> dict:
+    """Enregistre une interaction (422 si canal ou date invalide)."""
+    try:
+        return crm.add_interaction(
+            corps.nom, corps.prenom, corps.canal, corps.objet,
+            date_interaction=corps.date_interaction, notes=corps.notes, rappel=corps.rappel,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        logger.exception("Échec add_interaction(nom=%r, prenom=%r)", corps.nom, corps.prenom)
+        raise HTTPException(status_code=502, detail="Base CRM indisponible, réessayez plus tard.")
+
+
+@app.delete("/api/interactions/{interaction_id}")
+def supprimer_interaction(interaction_id: int) -> dict:
+    """Supprime une interaction (404 si id inconnu)."""
+    try:
+        supprimee = crm.delete_interaction(interaction_id)
+    except Exception:
+        logger.exception("Échec delete_interaction(id=%r)", interaction_id)
+        raise HTTPException(status_code=502, detail="Base CRM indisponible, réessayez plus tard.")
+    if not supprimee:
+        raise HTTPException(status_code=404, detail="Interaction introuvable.")
+    return {"deleted": True}
+
+
+@app.put("/api/statut")
+def statut(corps: StatutIn) -> dict:
+    """Fixe le statut d'un élu (422 si statut invalide)."""
+    try:
+        return crm.set_statut(corps.nom, corps.prenom, corps.statut)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        logger.exception("Échec set_statut(nom=%r, prenom=%r)", corps.nom, corps.prenom)
+        raise HTTPException(status_code=502, detail="Base CRM indisponible, réessayez plus tard.")
+
+
+@app.get("/api/rappels")
+def rappels() -> dict:
+    """Relances dues : interactions dont la date de rappel est échue."""
+    try:
+        results = crm.rappels_en_attente()
+    except Exception:
+        logger.exception("Échec rappels_en_attente()")
+        raise HTTPException(status_code=502, detail="Base CRM indisponible, réessayez plus tard.")
+    return {"count": len(results), "results": results}
 
 
 # --- Front React buildé (prod) — monté en dernier pour ne pas masquer /api/* ---
