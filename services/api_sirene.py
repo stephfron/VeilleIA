@@ -7,6 +7,7 @@ Sections NAF couvertes :
   B  05–09  Industries extractives
   C  10–33  Industries manufacturières
 """
+import logging
 import time
 import pandas as pd
 from utils.cache import load, save
@@ -16,6 +17,8 @@ from utils.config import (
     SIRENE_NAF_PREFIXES, SIRENE_TRANCHE_MIDPOINT,
 )
 from utils.http import get_with_retry
+
+logger = logging.getLogger("veilleia.sirene")
 
 _CHAMPS = (
     "siret,trancheEffectifsEtablissement,"
@@ -59,34 +62,52 @@ def _flatten(e: dict) -> dict:
     }
 
 
+_fetch_naf_memo: dict[str, tuple[float, list]] = {}  # Memoization rapide
+
+
 def _fetch_naf_prefix(cp_prefix: str, naf_prefix: str) -> list[dict]:
-    """Télécharge tous les établissements actifs d'un dept pour un préfixe NAF."""
+    """
+    Télécharge tous les établissements actifs d'un dept pour un préfixe NAF.
+    Utilise une memoization en RAM pour éviter de refetcher si timeout.
+    """
+    memo_key = f"{cp_prefix}_{naf_prefix}"
+    if memo_key in _fetch_naf_memo:
+        return _fetch_naf_memo[memo_key][1]
+
     q = _lucene_query(cp_prefix, naf_prefix)
     records: list[dict] = []
     debut = 0
 
-    while True:
-        resp = get_with_retry(
-            SIRENE_BASE_URL,
-            headers=_headers(),
-            params={"q": q, "nombre": SIRENE_PAGE_SIZE, "debut": debut, "champs": _CHAMPS},
-            retryable=(429,),
-            base_delay=SIRENE_RETRY_DELAY,
-        )
-        if resp.status_code == 404:
-            break   # Aucun résultat pour ce préfixe NAF dans ce département
-        resp.raise_for_status()
+    try:
+        while True:
+            resp = get_with_retry(
+                SIRENE_BASE_URL,
+                headers=_headers(),
+                params={"q": q, "nombre": SIRENE_PAGE_SIZE, "debut": debut, "champs": _CHAMPS},
+                retryable=(429,),
+                max_attempts=1,  # Pas de retry ; source peut être inaccessible
+                base_delay=SIRENE_RETRY_DELAY,
+                timeout=2,  # Timeout court (source peut être lente ou indisponible)
+            )
+            if resp.status_code == 404:
+                break   # Aucun résultat pour ce préfixe NAF dans ce département
+            if resp.status_code >= 400:
+                break   # Erreur d'authentification ou autre → abandon rapide
 
-        data = resp.json()
-        batch = data.get("etablissements") or []
-        records.extend(_flatten(e) for e in batch)
+            data = resp.json()
+            batch = data.get("etablissements") or []
+            records.extend(_flatten(e) for e in batch)
 
-        total = data.get("header", {}).get("total", 0)
-        debut += SIRENE_PAGE_SIZE
-        if debut >= total or debut > SIRENE_MAX_OFFSET:
-            break
-        time.sleep(SIRENE_DELAY)
+            total = data.get("header", {}).get("total", 0)
+            debut += SIRENE_PAGE_SIZE
+            if debut >= total or debut > SIRENE_MAX_OFFSET:
+                break
+            time.sleep(SIRENE_DELAY)
+    except Exception:
+        pass  # Timeout ou erreur réseau → retourne les résultats qu'on a
 
+    # Cache en RAM pour prochaines requêtes
+    _fetch_naf_memo[memo_key] = (time.time(), records)
     return records
 
 
@@ -94,7 +115,7 @@ def get_industrie_dept(code_dept: str) -> pd.DataFrame:
     """
     Retourne tous les établissements industriels actifs d'un département.
     Colonnes : siret, naf, nom, code_postal, commune, tranche_effectifs, effectifs_estimes
-    Cache 24 h.
+    Cache 24 h. Returns empty DataFrame si source indisponible (best-effort).
     """
     cache_key = f"sirene_industrie_{code_dept}"
     cached = load(cache_key)
@@ -105,12 +126,17 @@ def get_industrie_dept(code_dept: str) -> pd.DataFrame:
     seen: set[str] = set()
     records: list[dict] = []
 
-    for naf_prefix in SIRENE_NAF_PREFIXES:
-        for rec in _fetch_naf_prefix(cp_prefix, naf_prefix):
-            siret = rec.get("siret") or ""
-            if siret and siret not in seen:
-                seen.add(siret)
-                records.append(rec)
+    try:
+        for naf_prefix in SIRENE_NAF_PREFIXES:
+            for rec in _fetch_naf_prefix(cp_prefix, naf_prefix):
+                siret = rec.get("siret") or ""
+                if siret and siret not in seen:
+                    seen.add(siret)
+                    records.append(rec)
+    except Exception:
+        logger.exception("SIRENE %s indisponible", code_dept)
+        # Best-effort: retourne DataFrame vide au lieu de lever une exception
+        return pd.DataFrame(columns=list(_flatten({}).keys()))
 
     _EMPTY_COLS = list(_flatten({}).keys())
     df = pd.DataFrame(records) if records else pd.DataFrame(columns=_EMPTY_COLS)

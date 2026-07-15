@@ -43,8 +43,8 @@ def _fetch_formations_dept(code_dept: str) -> list[dict] | None:
         return cached
 
     try:
-        # Budget réduit : source best-effort, ne doit jamais bloquer (comme api_activite)
-        # Query : formations industrielles (CAP, Bac pro, BTS) en apprentissage
+        # Budget strictement réduit : source best-effort, timeout court (2s max)
+        # pour ne pas bloquer requête utilisateur. Query : formations industrielles
         params = {
             "domain": "formation_continue",  # ou "formation_initiale"
             "romes": "H1203",  # Code Rome pour opérateurs industriels
@@ -55,9 +55,9 @@ def _fetch_formations_dept(code_dept: str) -> list[dict] | None:
             _ONISEP_API,
             params=params,
             retryable=(429, 500, 502, 503),
-            max_attempts=2,
-            base_delay=1.0,
-            timeout=10,
+            max_attempts=1,  # Pas de retry en cas de timeout
+            base_delay=0.5,
+            timeout=2,  # Timeout court : abandon rapide si indisponible
         )
         resp.raise_for_status()
         results = resp.json().get("resultats", [])
