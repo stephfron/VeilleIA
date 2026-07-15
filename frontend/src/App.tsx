@@ -1,12 +1,16 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import Accueil from "./pages/Accueil";
+import TerritoireDetail from "./pages/TerritoireDetail";
 import FicheTerritoire from "./pages/FicheTerritoire";
+import Dossier from "./pages/Dossier";
+import Cibles from "./pages/Cibles";
 import Textes from "./pages/Textes";
 
 const NAV = [
   { to: "/", icon: "🏠", label: "Accueil", end: true },
-  { to: "/fiche-territoire", icon: "📍", label: "Fiche territoire", end: false },
-  { to: "/textes", icon: "📜", label: "Textes législatifs", end: false },
+  { to: "/cibles", icon: "🎯", label: "Cibles", end: false },
+  { to: "/fiche-territoire", icon: "🔍", label: "Recherche", end: false },
+  { to: "/textes", icon: "📜", label: "Textes", end: false },
 ];
 
 export default function App() {
@@ -34,6 +38,9 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Accueil />} />
+          <Route path="/territoire/:codeDept" element={<TerritoireDetail />} />
+          <Route path="/cibles" element={<Cibles />} />
+          <Route path="/dossier/:prenom/:nom" element={<Dossier />} />
           <Route path="/fiche-territoire" element={<FicheTerritoire />} />
           <Route path="/textes" element={<Textes />} />
         </Routes>
