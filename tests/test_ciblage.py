@@ -42,19 +42,22 @@ def test_plus_gros_territoire_en_premier():
 
 
 def test_contact_recent_fait_chuter_la_priorite(monkeypatch):
-    """Un contact d'hier écrase la fraîcheur : le petit territoire passe devant."""
+    """Contact d'hier réduit la fraîcheur, mais l'industrie reste dominante (45%)."""
     hier = (date.today() - timedelta(days=1)).isoformat()
     monkeypatch.setattr(ciblage, "resume_engagement", lambda: {
         "anne grand": {"statut": "contacte", "nb_interactions": 1, "dernier_contact": hier},
     })
     cibles = ciblage.cibles_departement("69")
-    assert [c["parlementaire"]["nom"] for c in cibles] == ["Petit", "Grand"]
-    grand = cibles[1]
+    # Grand territoire reste d'abord (industrie = 45%)
+    assert cibles[0]["parlementaire"]["nom"] == "Grand"
+    grand = cibles[0]
     assert grand["nb_interactions"] == 1
     assert grand["dernier_contact"] == hier
     assert grand["detail_score"]["motif_fraicheur"] == "contacté il y a 1 j"
-    # 1/90 × 0.6 → composante fraîcheur quasi nulle
+    # 1/90 × 0.6 → composante fraîcheur réduite à ~0.7/100
     assert grand["detail_score"]["fraicheur"] == pytest.approx(0.7, abs=0.05)
+    # Mais le score global baisse par rapport à jamais-contacté (79 → ~55)
+    assert grand["score"] < 75.0
 
 
 def test_relance_apres_90_jours(monkeypatch):
