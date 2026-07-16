@@ -4,10 +4,12 @@ import TerritoireDetail from "./pages/TerritoireDetail";
 import FicheTerritoire from "./pages/FicheTerritoire";
 import Dossier from "./pages/Dossier";
 import Cibles from "./pages/Cibles";
+import TableauDeBord from "./pages/TableauDeBord";
 import Textes from "./pages/Textes";
 
 const NAV = [
   { to: "/", icon: "🏠", label: "Accueil", end: true },
+  { to: "/tableau-de-bord", icon: "📊", label: "Tableau de bord", end: true },
   { to: "/cibles", icon: "🎯", label: "Cibles", end: false },
   { to: "/fiche-territoire", icon: "🔍", label: "Recherche", end: false },
   { to: "/textes", icon: "📜", label: "Textes", end: false },
@@ -38,6 +40,7 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Accueil />} />
+          <Route path="/tableau-de-bord" element={<TableauDeBord />} />
           <Route path="/territoire/:codeDept" element={<TerritoireDetail />} />
           <Route path="/cibles" element={<Cibles />} />
           <Route path="/dossier/:prenom/:nom" element={<Dossier />} />
