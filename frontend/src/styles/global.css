@@ -195,6 +195,21 @@ main.content {
   font-size: 0.9rem;
 }
 
+.card-link {
+  display: inline-block;
+  color: var(--badge);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-top: var(--space-xs);
+  transition: color 0.15s ease;
+}
+
+.card-link:hover {
+  color: var(--navy);
+  text-decoration: underline;
+}
+
 .section-dark {
   background: var(--navy);
   color: var(--white);

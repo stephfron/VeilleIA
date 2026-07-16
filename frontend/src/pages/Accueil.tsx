@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { Eyebrow } from "../components/ui";
+import { TerritoireCard } from "../components/TerritoireCard";
+import { useRecentTerritories } from "../hooks/useRecentTerritories";
 
 const SHORTCUTS = [
   {
@@ -23,6 +25,8 @@ const SHORTCUTS = [
 ];
 
 export default function Accueil() {
+  const { territories } = useRecentTerritories();
+
   return (
     <>
       <section className="section-dark">
@@ -33,6 +37,7 @@ export default function Accueil() {
           publiques françaises, sans IA.
         </p>
       </section>
+
       <div className="grid-3">
         {SHORTCUTS.map(({ icon, titre, desc, to }) => (
           <div className="card" key={titre} style={{ display: "flex", flexDirection: "column" }}>
@@ -50,6 +55,17 @@ export default function Accueil() {
           </div>
         ))}
       </div>
+
+      {territories.length > 0 && (
+        <div style={{ marginTop: "2rem" }}>
+          <Eyebrow>📍 Territoires Récents</Eyebrow>
+          <div className="grid-3">
+            {territories.map((t) => (
+              <TerritoireCard key={t.codeDept} {...t} />
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

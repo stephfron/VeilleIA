@@ -6,6 +6,7 @@ import TopEmployeurs from "../components/TopEmployeurs";
 import { TopNafChart } from "../components/charts";
 import ActiviteLegislative from "../components/ActiviteLegislative";
 import FormationCard from "../components/FormationCard";
+import { useRecentTerritories } from "../hooks/useRecentTerritories";
 import type { Fiche, Formation } from "../types";
 
 /**
@@ -19,6 +20,7 @@ export default function TerritoireDetail() {
   const [loading, setLoading] = useState(false);
   const [loadingFormations, setLoadingFormations] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addTerritory } = useRecentTerritories();
 
   useEffect(() => {
     if (!codeDept) {
@@ -29,7 +31,16 @@ export default function TerritoireDetail() {
     setError(null);
     // Recherche sans filtre (query vide) pour le département
     fetchParlementaires(codeDept)
-      .then((r) => setFiches(r.results))
+      .then((r) => {
+        setFiches(r.results);
+        // Enregistrer ce territoire dans les récents
+        if (r.results.length > 0) {
+          const firstFiche = r.results[0];
+          const nomDept = firstFiche.parlementaire.libelle_dept || codeDept;
+          const nbEtablissements = firstFiche.territoire.nb_etablissements_industriels;
+          addTerritory(codeDept, nomDept, nbEtablissements);
+        }
+      })
       .catch((e: Error) => {
         setError(e.message);
         setFiches([]);

@@ -185,3 +185,12 @@ export interface Dossier {
   synthese: string | null;
   synthese_status: string;
 }
+
+/* --------------------------------------------------------- Territoires Récents */
+
+export interface RecentTerritory {
+  codeDept: string;
+  nomDept: string;
+  nbEtablissements: number;
+  dateVisite?: string;
+}
