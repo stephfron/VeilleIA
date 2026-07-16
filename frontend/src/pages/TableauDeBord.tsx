@@ -63,17 +63,34 @@ export default function TableauDeBord() {
         setLoading(true);
         setError(null);
 
-        // Charge toutes les cibles pour les statistiques
-        const ciblesResp = await fetchCibles("");
-        setCibles(ciblesResp.results);
+        let ciblesData: Cible[] = [];
+        let rappelsData: Rappel[] = [];
+
+        // Charge toutes les cibles pour les statistiques (requête générique)
+        try {
+          const ciblesResp = await fetchCibles("*");
+          ciblesData = ciblesResp.results;
+        } catch {
+          // Cibles indisponibles, continue avec données vides
+          ciblesData = [];
+        }
 
         // Charge les rappels
-        const rappelsResp = await fetchRappels();
-        setRappels(rappelsResp.results);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Erreur de chargement");
-        setCibles(null);
-        setRappels([]);
+        try {
+          const rappelsResp = await fetchRappels();
+          rappelsData = rappelsResp.results;
+        } catch {
+          // Rappels indisponibles, continue avec données vides
+          rappelsData = [];
+        }
+
+        setCibles(ciblesData);
+        setRappels(rappelsData);
+
+        // N'affiche l'erreur que s'il n'y a vraiment aucune donnée
+        if (ciblesData.length === 0 && rappelsData.length === 0) {
+          setError("Pas de données disponibles");
+        }
       } finally {
         setLoading(false);
       }
